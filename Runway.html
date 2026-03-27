@@ -1,0 +1,1355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commute Tracker</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff; --bg2: #f5f4f0; --bg3: #eeede8;
+    --text: #1a1a18; --text2: #6b6a65; --text3: #9b9a95;
+    --border: rgba(0,0,0,0.1); --border2: rgba(0,0,0,0.18);
+    --green: #1D9E75; --green-bg: rgba(29,158,117,0.1);
+    --blue: #185FA5; --blue-bg: #E6F1FB;
+    --amber: #BA7517; --amber-bg: #FAEEDA;
+    --depart-bg: #EAF3DE; --depart-text: #3B6D11; --depart-border: #97C459;
+    --arrive-bg: #E6F1FB; --arrive-text: #185FA5; --arrive-border: #85B7EB;
+    --r: 10px; --r-lg: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1e1e1c; --bg2: #2a2a27; --bg3: #333330;
+      --text: #f0efe9; --text2: #a09f98; --text3: #6b6a65;
+      --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.18);
+      --amber-bg: #412402; --blue-bg: #042C53; --green-bg: rgba(29,158,117,0.15);
+      --depart-bg: #173404; --depart-text: #C0DD97; --depart-border: #3B6D11;
+      --arrive-bg: #042C53; --arrive-text: #85B7EB; --arrive-border: #185FA5;
+    }
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg3); color: var(--text); min-height: 100vh; }
+  .container { max-width: 640px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+  h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
+  .subtitle { font-size: 14px; color: var(--text2); margin-bottom: 1.5rem; }
+  .tabs { display: flex; gap: 4px; background: var(--bg2); border-radius: var(--r); padding: 4px; margin-bottom: 1.25rem; }
+  .tab { flex: 1; padding: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: none; color: var(--text2); border-radius: 7px; transition: all 0.15s; }
+  .tab.active { background: var(--bg); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .section { display: none; }
+  .section.active { display: block; }
+  .section-label { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; color: var(--text3); text-transform: uppercase; margin-bottom: 8px; }
+  .route-group { margin-bottom: 1.1rem; }
+
+  /* Standard 2-col grid for commutes */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .trip-card { background: var(--bg); border: 1.5px solid var(--border); border-radius: var(--r-lg); padding: 12px 14px; cursor: pointer; transition: border-color 0.15s; }
+  .trip-card:hover { border-color: var(--border2); }
+  .trip-card.selected { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
+  .trip-card-icon { font-size: 20px; margin-bottom: 6px; line-height: 1; }
+  .trip-card-name { font-size: 13px; font-weight: 600; }
+  .trip-card-desc { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .variant-toggle { display: flex; margin-top: 8px; gap: 4px; }
+  .variant-btn { font-size: 11px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--border2); background: transparent; color: var(--text2); cursor: pointer; font-weight: 500; transition: all 0.12s; }
+  .variant-btn.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+  /* Airport grid: 3 airports × 2 directions */
+  .airport-grid { display: grid; grid-template-columns: 36px 1fr 1fr; gap: 0; }
+  .ap-corner { padding: 0; }
+  .ap-col-header { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 0 4px 8px; }
+  .ap-col-depart { color: var(--depart-text); }
+  .ap-col-arrive { color: var(--arrive-text); }
+  .ap-row-label { display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--text3); letter-spacing: 0.04em; padding-right: 6px; }
+  .ap-cell { background: var(--bg); border: 1.5px solid var(--border); border-radius: var(--r-lg); padding: 0; cursor: pointer; transition: border-color 0.15s; overflow: hidden; }
+  .ap-cell:hover { border-color: var(--border2); }
+  .ap-cell.selected { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
+  .ap-cell-inner { padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; height: 100%; border-left: 3px solid transparent; }
+  .ap-cell-dep .ap-cell-inner { border-left-color: var(--depart-border); }
+  .ap-cell-arr .ap-cell-inner { border-left-color: var(--arrive-border); }
+  .ap-cell-icon { font-size: 18px; margin-bottom: 4px; line-height: 1; }
+  .ap-cell-name { font-size: 13px; font-weight: 600; color: var(--text); }
+  .ap-cell-sub { font-size: 11px; color: var(--text2); }
+
+  .collapsible-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 6px 0; border: none; background: none; color: var(--text2); font-size: 12px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; width: 100%; }
+  .chevron { font-size: 9px; transition: transform 0.2s; display: inline-block; }
+  .collapsible-toggle.open .chevron { transform: rotate(90deg); }
+  .collapsible-body { display: none; padding-top: 8px; }
+  .collapsible-body.open { display: block; }
+
+  /* Active logging */
+  .card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--r-lg); overflow: hidden; margin-bottom: 1rem; }
+  .card-header { padding: 14px 16px; border-bottom: 0.5px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  .card-header-icon { font-size: 20px; }
+  .card-header-title { font-weight: 600; font-size: 15px; }
+  .card-header-sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .pill { font-size: 11px; padding: 3px 10px; border-radius: 99px; font-weight: 500; margin-left: auto; }
+  .pill-amber { background: var(--amber-bg); color: var(--amber); }
+  .cp-list { padding: 8px 0; }
+  .cp-row { display: flex; align-items: center; gap: 10px; padding: 8px 16px; }
+  .cp-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border2); background: var(--bg); flex-shrink: 0; transition: all 0.2s; }
+  .cp-dot.logged { background: var(--green); border-color: var(--green); }
+  .cp-dot.next { border-color: var(--text2); }
+  .cp-label { flex: 1; font-size: 14px; }
+  .cp-time { font-size: 13px; color: var(--text2); font-variant-numeric: tabular-nums; min-width: 52px; text-align: right; }
+  .cp-btn { font-size: 12px; font-weight: 500; padding: 5px 14px; border-radius: var(--r); border: 1px solid var(--border2); background: var(--bg2); cursor: pointer; color: var(--text); white-space: nowrap; }
+  .cp-btn:hover { background: var(--bg3); }
+  .cp-btn:disabled { opacity: 0.35; cursor: default; }
+  .cp-skip { font-size: 11px; padding: 4px 10px; border-radius: var(--r); border: 1px solid var(--border2); background: transparent; cursor: pointer; color: var(--text3); white-space: nowrap; }
+  .cp-skip:hover { color: var(--text2); background: var(--bg2); }
+  .cp-undo { font-size: 11px; padding: 4px 10px; border-radius: var(--r); border: 1px solid var(--border2); background: transparent; cursor: pointer; color: var(--text3); white-space: nowrap; }
+  .cp-undo:hover { color: var(--text2); background: var(--bg2); }
+  .cp-check { font-size: 14px; color: var(--green); padding: 0 4px; }
+  .btn-row { display: flex; gap: 8px; margin-top: 1rem; }
+  .btn { padding: 10px 20px; border-radius: var(--r); font-size: 14px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; }
+  .btn-primary { background: var(--text); color: var(--bg); }
+  .btn-primary:hover { opacity: 0.85; }
+  .btn-primary:disabled { opacity: 0.35; cursor: default; }
+  .btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border2); }
+  .btn-ghost:hover { background: var(--bg2); }
+  .btn-danger { background: transparent; color: #c0392b; border: 1px solid rgba(192,57,43,0.3); }
+  .btn-danger:hover { background: rgba(192,57,43,0.06); }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+  /* Plan tab */
+  .suggest-box { background: var(--blue-bg); border-radius: var(--r-lg); padding: 16px; margin-bottom: 1rem; }
+  .suggest-box-title { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; color: var(--blue); text-transform: uppercase; margin-bottom: 12px; }
+  .suggest-field { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .suggest-field label { font-size: 13px; color: var(--text2); white-space: nowrap; min-width: 120px; }
+  .suggest-input { font-size: 14px; padding: 7px 10px; border-radius: var(--r); border: 1px solid var(--border2); background: var(--bg); color: var(--text); }
+  .suggest-result { background: var(--bg); border-radius: var(--r); padding: 12px 16px; margin-top: 12px; }
+  .suggest-leave { font-size: 26px; font-weight: 700; color: var(--text); }
+  .suggest-sub { font-size: 12px; color: var(--text2); margin-top: 3px; line-height: 1.5; }
+
+  /* Insights */
+  .insight-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--r-lg); padding: 16px; margin-bottom: 10px; }
+  .insight-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+  .insight-title { font-size: 15px; font-weight: 600; }
+  .insight-meta { font-size: 12px; color: var(--text2); }
+  .insight-total { font-size: 13px; color: var(--text2); margin-bottom: 10px; }
+  .insight-total strong { color: var(--text); }
+  .seg-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 0.5px solid var(--border); }
+  .seg-label { font-size: 12px; color: var(--text2); width: 160px; flex-shrink: 0; }
+  .seg-bar-bg { flex: 1; height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .seg-bar { height: 100%; background: var(--green); border-radius: 3px; }
+  .seg-med { font-size: 13px; font-variant-numeric: tabular-nums; min-width: 42px; text-align: right; font-weight: 500; }
+  .seg-range { font-size: 11px; color: var(--text3); min-width: 72px; text-align: right; }
+
+  /* History */
+  .hist-icon { font-size: 18px; }
+  .hist-meta { flex: 1; }
+  .hist-name { font-size: 14px; font-weight: 500; }
+  .hist-sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+  .hist-dur { font-size: 13px; color: var(--text2); font-variant-numeric: tabular-nums; }
+  .filter-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .filter-chip { font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 99px; border: 1px solid var(--border2); background: transparent; color: var(--text2); cursor: pointer; transition: all 0.12s; white-space: nowrap; }
+  .filter-chip:hover { border-color: var(--text2); color: var(--text); }
+  .filter-chip.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .hist-comment { font-size: 12px; color: var(--text2); font-style: italic; margin-top: 2px; }
+  .hist-comment-area { width: 100%; font-size: 13px; padding: 7px 10px; border-radius: var(--r); border: 1px solid var(--border2); background: var(--bg); color: var(--text); resize: none; font-family: inherit; line-height: 1.4; }
+  .hist-comment-area:focus { outline: none; border-color: var(--text2); }
+  .empty { text-align: center; padding: 3rem 1rem; color: var(--text2); font-size: 14px; line-height: 1.7; }
+
+  /* Forms */
+  .form-field { margin-bottom: 12px; }
+  .form-label { font-size: 12px; color: var(--text2); margin-bottom: 4px; display: block; }
+  .form-input { width: 100%; font-size: 14px; padding: 8px 12px; border-radius: var(--r); border: 1px solid var(--border2); background: var(--bg); color: var(--text); }
+  .form-input:focus { outline: none; border-color: var(--text2); }
+  .cp-edit-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+  .cp-edit-row { display: flex; gap: 6px; align-items: center; }
+  .cp-edit-input { flex: 1; font-size: 13px; padding: 7px 10px; border-radius: var(--r); border: 1px solid var(--border2); background: var(--bg); color: var(--text); }
+  .cp-time-input { font-size: 13px; padding: 6px 8px; border-radius: var(--r); border: 1px solid var(--border2); background: var(--bg); color: var(--text); width: 110px; flex-shrink: 0; }
+  .cp-edit-del { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 18px; padding: 0 4px; line-height: 1; }
+  .cp-edit-del:hover { color: #c0392b; }
+  .cp-input-dynamic { color: var(--blue) !important; font-weight: 500; }
+
+  /* Modals */
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: flex-end; justify-content: center; padding: 1rem; }
+  .modal-bg.open { display: flex; }
+  @media (min-width: 480px) { .modal-bg { align-items: center; } }
+  .modal { background: var(--bg); border-radius: var(--r-lg); border: 0.5px solid var(--border); padding: 1.5rem; width: 100%; max-width: 420px; max-height: 88vh; overflow-y: auto; }
+  .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .modal-sub { font-size: 12px; color: var(--text2); margin-bottom: 1rem; }
+
+  .modal-footer { display: flex; gap: 8px; margin-top: 1.25rem; }
+
+  /* Confirm modal */
+  .confirm-body { font-size: 14px; color: var(--text2); margin-bottom: 1.25rem; line-height: 1.6; }
+
+  .banner { display: none; font-size: 13px; padding: 10px 14px; border-radius: var(--r); margin-bottom: 1rem; line-height: 1.5; }
+
+  /* Shared time filter panel */
+  .filter-panel { background: var(--bg2); border-radius: var(--r-lg); padding: 12px 14px; margin-bottom: 1rem; }
+  .filter-panel-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .filter-panel-row:last-child { margin-bottom: 0; }
+  .filter-panel-label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text3); min-width: 64px; flex-shrink: 0; }
+  .day-chip { font-size: 12px; font-weight: 500; width: 36px; height: 28px; border-radius: 99px; border: 1px solid var(--border2); background: transparent; color: var(--text2); cursor: pointer; transition: all 0.12s; display: flex; align-items: center; justify-content: center; }
+  .day-chip:hover { border-color: var(--text2); color: var(--text); }
+  .day-chip.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .time-input { font-size: 13px; padding: 5px 8px; border-radius: var(--r); border: 1px solid var(--border2); background: var(--bg); color: var(--text); width: 100px; }
+  .time-input:focus { outline: none; border-color: var(--text2); }
+  .filter-clear { font-size: 12px; color: var(--text3); background: none; border: none; cursor: pointer; padding: 0; margin-left: auto; text-decoration: underline; }
+  .filter-clear:hover { color: var(--text2); }
+  .filter-active-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--amber-bg); color: var(--amber); margin-left: 6px; }
+
+  /* Inline history expand */
+  .hist-item { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--r-lg); margin-bottom: 8px; overflow: hidden; }
+  .hist-row { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; transition: background 0.1s; }
+  .hist-row:hover { background: var(--bg2); }
+  .hist-chevron { font-size: 9px; color: var(--text3); transition: transform 0.18s; flex-shrink: 0; }
+  .hist-item.expanded .hist-chevron { transform: rotate(90deg); }
+  .hist-detail { display: none; border-top: 0.5px solid var(--border); }
+  .hist-item.expanded .hist-detail { display: block; }
+  .hist-cp-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 16px; border-top: 0.5px solid var(--border); font-size: 14px; gap: 8px; }
+  .hist-cp-row:first-child { border-top: none; }
+  .hist-cp-name { flex: 1; color: var(--text); }
+  .hist-cp-name.skipped { color: var(--text3); text-decoration: line-through; }
+  .hist-cp-time { color: var(--text2); font-variant-numeric: tabular-nums; font-size: 13px; min-width: 48px; text-align: right; }
+  .hist-cp-gap { font-size: 11px; color: var(--text3); text-align: right; padding: 2px 16px 4px; }
+  .hist-detail-footer { display: flex; gap: 8px; padding: 10px 16px; border-top: 0.5px solid var(--border); }
+  /* Edit mode inside expanded row */
+  .hist-cp-input { font-size: 13px; padding: 5px 8px; border-radius: var(--r); border: 1px solid var(--border2); background: var(--bg); color: var(--text); width: 106px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Commute Tracker</h1>
+  <p class="subtitle">Log trips to learn your real travel times.</p>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('log')">Log trip</button>
+    <button class="tab" onclick="switchTab('plan')">Plan</button>
+    <button class="tab" onclick="switchTab('insights')">Insights</button>
+    <button class="tab" onclick="switchTab('history')">History</button>
+  </div>
+
+  <!-- LOG TAB -->
+  <div id="tab-log" class="section active">
+    <div id="step-choose">
+      <div class="route-group">
+        <div class="section-label">Commutes</div>
+        <div class="grid-2" id="commute-grid"></div>
+      </div>
+      <div class="route-group">
+        <div class="section-label">Flights</div>
+        <div id="flight-grid"></div>
+      </div>
+      <div class="route-group">
+        <button class="collapsible-toggle" id="custom-flights-toggle" onclick="toggleSection('custom-flights-toggle','custom-flights-body')">
+          <span class="chevron">▶</span> Other flights
+        </button>
+        <div class="collapsible-body" id="custom-flights-body">
+          <div id="custom-flight-grid" style="margin-bottom:8px;"></div>
+          <button class="btn btn-ghost btn-sm" onclick="openAddModal('flight')" style="width:100%;">+ Add flight route</button>
+        </div>
+      </div>
+      <div class="route-group">
+        <button class="collapsible-toggle" id="custom-toggle" onclick="toggleSection('custom-toggle','custom-body')">
+          <span class="chevron">▶</span> Other routes
+        </button>
+        <div class="collapsible-body" id="custom-body">
+          <div class="grid-2" id="custom-grid" style="margin-bottom:8px;"></div>
+          <button class="btn btn-ghost btn-sm" onclick="openAddModal('route')" style="width:100%;">+ Add route</button>
+        </div>
+      </div>
+
+    </div>
+
+    <div id="step-log" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-header-icon" id="log-icon"></div>
+          <div>
+            <div class="card-header-title" id="log-title"></div>
+            <div class="card-header-sub" id="log-started"></div>
+          </div>
+          <span class="pill pill-amber">In progress</span>
+        </div>
+        <div class="cp-list" id="cp-list"></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="save-btn" onclick="saveTrip()" disabled style="flex:1;">Save trip</button>
+        <button class="btn btn-danger" onclick="discardTrip()">Discard</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLAN TAB -->
+  <div id="tab-plan" class="section">
+    <div class="suggest-box">
+      <div class="suggest-box-title">When should I leave?</div>
+      <div class="suggest-field">
+        <label>Route</label>
+        <select id="plan-type" class="suggest-input" style="flex:1;" onchange="renderPlan()"></select>
+      </div>
+      <div class="suggest-field">
+        <label>Need to arrive by</label>
+        <input type="time" id="plan-arrive" class="suggest-input" onchange="renderPlan()">
+      </div>
+      <div class="suggest-field">
+        <label>Buffer</label>
+        <input type="number" id="plan-buffer" class="suggest-input" value="5" min="0" max="120" style="width:72px;" onchange="renderPlan()">
+        <span style="font-size:13px;color:var(--text2);">min</span>
+      </div>
+      <div id="plan-result"></div>
+    </div>
+    <div id="plan-segments"></div>
+  </div>
+
+  <!-- INSIGHTS TAB -->
+  <div id="tab-insights" class="section">
+    <div id="insights-filter-panel"></div>
+    <div id="insights-body"></div>
+  </div>
+
+  <!-- HISTORY TAB -->
+  <div id="tab-history" class="section">
+    <div style="display:flex;gap:8px;margin-bottom:0.75rem;">
+      <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="exportData()">Export backup</button>
+      <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="document.getElementById('import-input').click()">Import backup</button>
+      <input type="file" id="import-input" accept=".json" style="display:none;" onchange="importData(event)">
+    </div>
+    <div id="hist-time-filter-panel"></div>
+    <div style="display:flex;gap:8px;margin-bottom:1rem;">
+      <button class="btn btn-ghost btn-sm" onclick="expandAllTrips()">Expand all</button>
+      <button class="btn btn-ghost btn-sm" onclick="collapseAllTrips()">Collapse all</button>
+    </div>
+    <div class="banner" id="import-banner"></div>
+    <div id="history-body"></div>
+  </div>
+</div>
+
+<!-- Delete confirm modal -->
+<div class="modal-bg" id="modal-confirm" onclick="if(event.target===this)closeModal('modal-confirm')">
+  <div class="modal" style="max-width:340px;">
+    <div class="modal-title">Delete trip?</div>
+    <div class="confirm-body">This will permanently remove the trip and all its checkpoint data. This can't be undone.</div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" style="flex:1;" onclick="closeModal('modal-confirm')">Cancel</button>
+      <button class="btn btn-danger" onclick="doDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add route modal -->
+<div class="modal-bg" id="modal-route" onclick="if(event.target===this)closeModal('modal-route')">
+  <div class="modal">
+    <div class="modal-title" id="modal-route-title">Add route</div>
+
+    <!-- Flight mode -->
+    <div id="modal-flight-fields" style="display:none;">
+      <div style="display:flex;gap:8px;margin-top:1rem;margin-bottom:12px;">
+        <div style="flex:1;">
+          <label class="form-label">City / location within city</label>
+          <input class="form-input" id="new-flight-city" placeholder="e.g. Toronto downtown" />
+        </div>
+        <div style="flex:1;">
+          <label class="form-label">Airport code</label>
+          <input class="form-input" id="new-flight-airport" placeholder="e.g. YYZ" style="text-transform:uppercase;" maxlength="4" />
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--arrive-text);margin-bottom:6px;padding:4px 8px;background:var(--arrive-bg);border-radius:var(--r);">🛬 Arrival steps</div>
+          <div class="cp-edit-list" id="new-arr-cp-list"></div>
+          <button class="btn btn-ghost btn-sm" onclick="addCpFieldTo('new-arr-cp-list')" style="width:100%;font-size:11px;">+ Step</button>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--depart-text);margin-bottom:6px;padding:4px 8px;background:var(--depart-bg);border-radius:var(--r);">✈️ Departure steps</div>
+          <div class="cp-edit-list" id="new-dep-cp-list"></div>
+          <button class="btn btn-ghost btn-sm" onclick="addCpFieldTo('new-dep-cp-list')" style="width:100%;font-size:11px;">+ Step</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Route mode -->
+    <div id="modal-route-fields" style="display:none;">
+      <div style="display:flex;gap:8px;margin-top:1rem;margin-bottom:12px;">
+        <div style="flex:1;">
+          <label class="form-label">Origin</label>
+          <input class="form-input" id="new-route-origin" placeholder="e.g. Home" />
+        </div>
+        <div style="flex:1;">
+          <label class="form-label">Destination</label>
+          <input class="form-input" id="new-route-dest" placeholder="e.g. Office" />
+        </div>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Checkpoints <span style="font-weight:400;color:var(--text3);">(in order)</span></label>
+        <div class="cp-edit-list" id="new-cp-list"></div>
+        <button class="btn btn-ghost btn-sm" onclick="addCpFieldTo('new-cp-list')" style="width:100%;">+ Add checkpoint</button>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" style="flex:1;" onclick="closeModal('modal-route')">Cancel</button>
+      <button class="btn btn-primary" id="modal-route-save-btn" onclick="saveNewRoute()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Built-in routes ──────────────────────────────────────────────────────────
+// skippable: set of checkpoint indices that show a Skip button in addition to Now
+const BUILTIN = {
+  'commute-am': {
+    name:'Morning commute', icon:'\u{1F305}', group:'commute',
+    variants: {
+      transit: { label:'Train', cps:['Left home','Arrived at station','Boarded train','Train departure','Train arrived at GCT','Arrived at office'] },
+      drive:   { label:'Car',   cps:['Left home','Called Uber','Uber/car arrived','Arrived at office'] },
+    },
+    defaultVariant: 'transit',
+  },
+  'commute-pm': {
+    name:'Evening commute', icon:'\u{1F306}', group:'commute',
+    variants: {
+      transit: { label:'Train', cps:['Left office','Arrived at GCT','Boarded train','Train departure','Arrived at station','Arrived home'] },
+      drive:   { label:'Car',   cps:['Left office','Called Uber','Uber/car arrived','Arrived home'] },
+    },
+    defaultVariant: 'transit',
+  },
+  'flight-lga-dep': { name:'LGA · Departure', icon:'\u2708\uFE0F', group:'flight', dir:'dep', airport:'LGA', cps:['Left home','Called Uber','Uber/car arrived','Arrived at LGA','Through security','At gate'], skippable:new Set([1]) },
+  'flight-jfk-dep': { name:'JFK · Departure', icon:'\u2708\uFE0F', group:'flight', dir:'dep', airport:'JFK', cps:['Left home','Called Uber','Uber/car arrived','Arrived at JFK','Through security','At gate'], skippable:new Set([1]) },
+  'flight-hpn-dep': { name:'HPN · Departure', icon:'\u2708\uFE0F', group:'flight', dir:'dep', airport:'HPN', cps:['Left home','Called Uber','Uber/car arrived','Arrived at HPN','Through security','At gate'], skippable:new Set([1]) },
+  'flight-lga-arr': { name:'LGA · Arrival', icon:'\u{1F6EC}', group:'flight', dir:'arr', airport:'LGA', cps:['Landed at LGA','Deplaned','Arrived at baggage claim','Baggage claimed','Called Uber','Uber/car arrived','Arrived home'], skippable:new Set([2,3,4]) },
+  'flight-jfk-arr': { name:'JFK · Arrival', icon:'\u{1F6EC}', group:'flight', dir:'arr', airport:'JFK', cps:['Landed at JFK','Deplaned','Arrived at baggage claim','Baggage claimed','Called Uber','Uber/car arrived','Arrived home'], skippable:new Set([2,3,4]) },
+  'flight-hpn-arr': { name:'HPN · Arrival', icon:'\u{1F6EC}', group:'flight', dir:'arr', airport:'HPN', cps:['Landed at HPN','Deplaned','Arrived at baggage claim','Baggage claimed','Called Uber','Uber/car arrived','Arrived home'], skippable:new Set([2,3,4]) },
+};
+
+// Active variant selection per commute type (session only)
+const commuteVariants = { 'commute-am': 'transit', 'commute-pm': 'transit' };
+
+// Helper: get effective checkpoints for a type (resolves variants)
+function getCps(typeId) {
+  const td = getType(typeId);
+  if (!td) return [];
+  if (td.variants) return td.variants[commuteVariants[typeId] || td.defaultVariant].cps;
+  return td.cps;
+}
+
+// ── State ────────────────────────────────────────────────────────────────────
+let trips = [];
+let customRoutes = {};
+let activeTrip = null;
+let selectedType = null;
+let deleteId = null;
+let editMode = false;
+
+function allTypes() { return { ...BUILTIN, ...customRoutes }; }
+function getType(id) { return allTypes()[id]; }
+
+// ── Persistence ──────────────────────────────────────────────────────────────
+function persist() {
+  localStorage.setItem('ct-trips-v2', JSON.stringify(trips));
+  localStorage.setItem('ct-routes-v2', JSON.stringify(customRoutes));
+}
+function hydrate() {
+  try { trips = JSON.parse(localStorage.getItem('ct-trips-v2') || '[]'); } catch(e) { trips=[]; }
+  try { customRoutes = JSON.parse(localStorage.getItem('ct-routes-v2') || '{}'); } catch(e) { customRoutes={}; }
+}
+hydrate();
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  const names = ['log','plan','insights','history'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', names[i]===name));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  if (name==='log') renderTripGrid();
+  if (name==='plan') renderPlanTab();
+  if (name==='insights') renderInsights();
+  if (name==='history') renderHistory();
+}
+
+// ── Log tab grid ─────────────────────────────────────────────────────────────
+function renderTripGrid() {
+  fillGrid('commute-grid', Object.entries(BUILTIN).filter(([,v])=>v.group==='commute'));
+  renderAirportGrid();
+  renderCustomFlightGrid();
+  fillGrid('custom-grid', Object.entries(customRoutes).filter(([,v])=>v.group==='custom'));
+}
+
+function renderCustomFlightGrid() {
+  const el = document.getElementById('custom-flight-grid'); if (!el) return;
+  el.innerHTML = '';
+  const flightEntries = Object.entries(customRoutes).filter(([,v])=>v.group==='custom-flight');
+  if (!flightEntries.length) return;
+  const byCity = new Map();
+  flightEntries.forEach(([id, td]) => {
+    const city = td.city || td.name;
+    if (!byCity.has(city)) byCity.set(city, []);
+    byCity.get(city).push([id, td]);
+  });
+  byCity.forEach((entries, city) => {
+    const ap = (entries.find(([,v])=>v.dir==='dep') || entries.find(([,v])=>v.dir==='arr') || [[,{airport:''}]])[1].airport;
+    const grid = document.createElement('div');
+    grid.className = 'airport-grid';
+    grid.style.cssText = 'gap:8px;align-items:stretch;margin-bottom:8px;';
+    grid.innerHTML = '<div class="ap-corner"></div><div class="ap-col-header ap-col-arrive">\uD83D\uDEEC Arriving</div><div class="ap-col-header ap-col-depart">\u2708\uFE0F Departing</div>';
+    const label = document.createElement('div');
+    label.className = 'ap-row-label';
+    label.textContent = ap;
+    grid.appendChild(label);
+    ['arr','dep'].forEach(dir => {
+      const entry = entries.find(([,v])=>v.dir===dir);
+      const cell = document.createElement('div');
+      cell.className = 'ap-cell ap-cell-' + dir + (entry && selectedType===entry[0] ? ' selected' : '');
+      if (entry) {
+        cell.id = 'tc-' + entry[0];
+        cell.onclick = () => selectType(entry[0]);
+        const icon = dir==='dep' ? '\u2708\uFE0F' : '\uD83D\uDEEC';
+        const lbl = dir==='dep' ? city+' \u2192 '+ap : ap+' \u2192 '+city;
+        const sub = dir==='dep' ? 'Departure' : 'Arrival';
+        cell.innerHTML = '<div class="ap-cell-inner"><div class="ap-cell-icon">'+icon+'</div><div class="ap-cell-name">'+lbl+'</div><div class="ap-cell-sub">'+sub+'</div></div>';
+      } else {
+        cell.style.cssText = 'opacity:0.3;cursor:default;';
+        cell.innerHTML = '<div class="ap-cell-inner" style="color:var(--text3);font-size:12px;padding-top:16px;">\u2014</div>';
+      }
+      grid.appendChild(cell);
+    });
+    el.appendChild(grid);
+  });
+}
+
+function fillGrid(containerId, entries) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  entries.forEach(([id, td]) => {
+    const div = document.createElement('div');
+    div.className = 'trip-card' + (selectedType===id?' selected':'');
+    div.id = 'tc-'+id;
+    const cps = getCps(id);
+    div.innerHTML = `<div class="trip-card-icon">${td.icon}</div><div class="trip-card-name">${td.name}</div><div class="trip-card-desc">${cps[0]} → ${cps[cps.length-1]}</div>`;
+    if (td.variants) {
+      const toggleRow = document.createElement('div');
+      toggleRow.className = 'variant-toggle';
+      toggleRow.onclick = e => e.stopPropagation();
+      Object.entries(td.variants).forEach(([vKey, vData]) => {
+        const btn = document.createElement('button');
+        btn.className = 'variant-btn' + ((commuteVariants[id]||td.defaultVariant)===vKey?' active':'');
+        btn.textContent = vData.label;
+        btn.onclick = (e) => { e.stopPropagation(); commuteVariants[id]=vKey; renderTripGrid(); };
+        toggleRow.appendChild(btn);
+      });
+      div.appendChild(toggleRow);
+    }
+    div.onclick = () => selectType(id);
+    el.appendChild(div);
+  });
+}
+
+function renderAirportGrid() {
+  const airports = ['LGA','JFK','HPN'];
+  const el = document.getElementById('flight-grid');
+  el.innerHTML = '';
+
+  const grid = document.createElement('div');
+  grid.className = 'airport-grid';
+  grid.style.cssText = 'gap: 8px; align-items: stretch;';
+
+  // Header row
+  grid.innerHTML = `
+    <div class="ap-corner"></div>
+    <div class="ap-col-header ap-col-depart">✈️ Departing</div>
+    <div class="ap-col-header ap-col-arrive">🛬 Arriving</div>
+  `;
+
+  airports.forEach((ap) => {
+    const depId = `flight-${ap.toLowerCase()}-dep`;
+    const arrId = `flight-${ap.toLowerCase()}-arr`;
+
+    const label = document.createElement('div');
+    label.className = 'ap-row-label';
+    label.textContent = ap;
+
+    const depCell = document.createElement('div');
+    depCell.className = 'ap-cell ap-cell-dep' + (selectedType===depId ? ' selected' : '');
+    depCell.id = 'tc-' + depId;
+    depCell.onclick = () => selectType(depId);
+    depCell.innerHTML = `<div class="ap-cell-inner"><div class="ap-cell-icon">✈️</div><div class="ap-cell-name">Home → ${ap}</div><div class="ap-cell-sub">Left home → gate</div></div>`;
+
+    const arrCell = document.createElement('div');
+    arrCell.className = 'ap-cell ap-cell-arr' + (selectedType===arrId ? ' selected' : '');
+    arrCell.id = 'tc-' + arrId;
+    arrCell.onclick = () => selectType(arrId);
+    arrCell.innerHTML = `<div class="ap-cell-inner"><div class="ap-cell-icon">🛬</div><div class="ap-cell-name">${ap} → Home</div><div class="ap-cell-sub">Landed → home</div></div>`;
+
+    grid.appendChild(label);
+    grid.appendChild(depCell);
+    grid.appendChild(arrCell);
+  });
+
+  el.appendChild(grid);
+}
+
+function toggleSection(toggleId, bodyId) {
+  document.getElementById(toggleId).classList.toggle('open');
+  document.getElementById(bodyId).classList.toggle('open');
+}
+// Keep old name for any internal calls
+function toggleCustom() { toggleSection('custom-toggle','custom-body'); }
+
+function selectType(type) {
+  selectedType = type;
+  startTrip();
+}
+
+function startTrip() {
+  if (!selectedType) return;
+  const td = getType(selectedType);
+  const cps = getCps(selectedType);
+  // store which variant was used so history can display it correctly
+  const variantKey = td.variants ? (commuteVariants[selectedType] || td.defaultVariant) : null;
+  activeTrip = { id: Date.now(), type: selectedType, variantKey, startedAt: Date.now(), checkpoints: cps.map(n=>({name:n,time:null,skipped:false})) };
+  document.getElementById('step-choose').style.display = 'none';
+  document.getElementById('step-log').style.display = 'block';
+  document.getElementById('log-icon').textContent = td.icon;
+  document.getElementById('log-title').textContent = td.name + (variantKey ? ' · ' + td.variants[variantKey].label : '');
+  renderActiveCPs();
+}
+
+function renderActiveCPs() {
+  const list = document.getElementById('cp-list');
+  const cps = activeTrip.checkpoints;
+  const td = getType(activeTrip.type);
+  const skippable = td && td.skippable ? td.skippable : new Set();
+  // "arrival" checkpoints: the very last one should only unlock once the prior is done
+  const lastIdx = cps.length - 1;
+  list.innerHTML = '';
+  // Any index with a logged time that is later than i makes i "superseded"
+  const anyLoggedAfter = (idx) => cps.slice(idx+1).some(c => c.time != null);
+
+  cps.forEach((cp, i) => {
+    const logged = cp.time != null;
+    const skipped = cp.skipped === true;
+    const prevDone = i === 0 || cps[i-1].time != null || cps[i-1].skipped;
+    const available = !logged && !skipped && (i < lastIdx || prevDone);
+    // Gray out Now if a later step is already logged (but still tappable)
+    const superseded = !logged && !skipped && anyLoggedAfter(i);
+
+    if (i > 0) {
+      const line = document.createElement('div');
+      line.style.cssText = 'width:1.5px;height:10px;background:var(--border);margin:0 0 0 22px;';
+      list.appendChild(line);
+    }
+    const row = document.createElement('div');
+    row.className = 'cp-row';
+    let leftBtn, rightBtn;
+
+    if (logged) {
+      // Logged: show Undo on left, checkmark on right
+      leftBtn  = `<button class="cp-undo" onclick="undoCP(${i})">Undo</button>`;
+      rightBtn = `<span class="cp-check">✓</span>`;
+    } else if (skipped) {
+      // Skipped: ghost left, "skipped" label on right
+      leftBtn  = `<span style="display:inline-block;min-width:46px;"></span>`;
+      rightBtn = `<button class="cp-undo" onclick="undoCP(${i})">Undo</button>`;
+    } else {
+      // Unlogged: Skip (if applicable) on left, Now on right (dimmed if superseded)
+      const canSkip = skippable.has(i);
+      leftBtn  = canSkip
+        ? `<button class="cp-skip" onclick="skipCP(${i})">Skip</button>`
+        : `<span style="display:inline-block;min-width:46px;"></span>`;
+      const nowStyle = superseded ? 'opacity:0.35;' : '';
+      rightBtn = `<button class="cp-btn" onclick="logCP(${i})" style="${nowStyle}">Now</button>`;
+    }
+
+    const dotClass = logged ? 'logged' : (available && !superseded ? 'next' : '');
+    row.innerHTML = `
+      <div class="cp-dot ${dotClass}"></div>
+      <div class="cp-label" style="${skipped?'color:var(--text3);text-decoration:line-through;':''}">${cp.name}</div>
+      <div class="cp-time">${logged?fmtTime(cp.time):''}</div>
+      ${leftBtn}${rightBtn}
+    `;
+    list.appendChild(row);
+  });
+  document.getElementById('log-started').textContent = 'Started ' + fmtTime(activeTrip.startedAt);
+  document.getElementById('save-btn').disabled = !cps.some(c=>c.time!=null||c.skipped);
+}
+
+function logCP(i) {
+  const cps = activeTrip.checkpoints;
+  cps[i].time = Date.now();
+  cps[i].skipped = false;
+  renderActiveCPs();
+}
+
+function skipCP(i) {
+  const cps = activeTrip.checkpoints;
+  cps[i].time = null;
+  cps[i].skipped = true;
+  renderActiveCPs();
+}
+
+function undoCP(i) {
+  const cps = activeTrip.checkpoints;
+  cps[i].time = null;
+  cps[i].skipped = false;
+  renderActiveCPs();
+}
+
+function saveTrip() {
+  trips.unshift({...activeTrip, checkpoints: activeTrip.checkpoints.map(c=>({...c}))});
+  persist(); discardTrip(); switchTab('history');
+}
+
+function discardTrip() {
+  activeTrip = null; selectedType = null;
+  document.getElementById('step-choose').style.display = 'block';
+  document.getElementById('step-log').style.display = 'none';
+  renderTripGrid();
+
+}
+
+// ── Plan tab ─────────────────────────────────────────────────────────────────
+function renderPlanTab() {
+  const sel = document.getElementById('plan-type');
+  const prev = sel.value;
+  sel.innerHTML = '';
+  const groups = [
+    ['Commutes', Object.entries(BUILTIN).filter(([,v])=>v.group==='commute')],
+    ['Flights',  Object.entries(BUILTIN).filter(([,v])=>v.group==='flight')],
+    ['Other routes', Object.entries(customRoutes)],
+  ];
+  groups.forEach(([label, entries]) => {
+    if (!entries.length) return;
+    const og = document.createElement('optgroup');
+    og.label = label;
+    entries.forEach(([id, td]) => {
+      const o = document.createElement('option');
+      o.value = id; o.textContent = td.icon + ' ' + td.name;
+      if (id===prev) o.selected = true;
+      og.appendChild(o);
+    });
+    sel.appendChild(og);
+  });
+  const arrive = document.getElementById('plan-arrive');
+  if (!arrive.value) {
+    const d = new Date(); d.setMinutes(0,0,0); d.setHours(d.getHours()+1);
+    arrive.value = d.toTimeString().slice(0,5);
+  }
+  renderPlan();
+}
+
+function renderPlan() {
+  const typeId = document.getElementById('plan-type').value;
+  const arriveStr = document.getElementById('plan-arrive').value;
+  const buffer = parseInt(document.getElementById('plan-buffer').value)||0;
+  const resultEl = document.getElementById('plan-result');
+  const segsEl = document.getElementById('plan-segments');
+  if (!typeId || !arriveStr) { resultEl.innerHTML=''; segsEl.innerHTML=''; return; }
+  const td = getType(typeId); if (!td) return;
+  const tripsOf = trips.filter(t=>t.type===typeId);
+  const planCps = getCps(typeId);
+  const total = segStats(tripsOf, 0, planCps.length-1);
+  const [h,m] = arriveStr.split(':').map(Number);
+  const arriveTs = new Date(); arriveTs.setHours(h,m,0,0);
+  if (!total) {
+    resultEl.innerHTML = `<div class="suggest-result"><div style="font-size:14px;color:var(--text2);">No data yet for this route. Log some trips first.</div></div>`;
+    segsEl.innerHTML = ''; return;
+  }
+  const leaveTs  = new Date(arriveTs - total.med - buffer*60000);
+  const leaveSlow = new Date(arriveTs - total.max - buffer*60000);
+  resultEl.innerHTML = `<div class="suggest-result">
+    <div class="suggest-leave">Leave by ${fmtTime(leaveTs)}</div>
+    <div class="suggest-sub">Median travel time ${fmtDur(total.med)} + ${buffer}min buffer · ${total.n} trip${total.n>1?'s':''}</div>
+    <div class="suggest-sub" style="margin-top:4px;">Worst case: leave by ${fmtTime(leaveSlow)} (${fmtDur(total.max)} slowest trip)</div>
+  </div>`;
+  if (planCps.length > 2) {
+    let maxMed=0; const segs=[];
+    for (let i=0;i<planCps.length-1;i++) {
+      const s=segStats(tripsOf,i,i+1);
+      if (s) { maxMed=Math.max(maxMed,s.med); segs.push({label:`${planCps[i]} → ${planCps[i+1]}`,s}); }
+    }
+    let html='<div class="insight-card"><div style="font-size:13px;font-weight:600;margin-bottom:10px;">Segment breakdown</div>';
+    segs.forEach(({label,s})=>{
+      const pct=maxMed>0?Math.round(s.med/maxMed*100):0;
+      html+=`<div class="seg-row"><div class="seg-label">${label}</div><div class="seg-bar-bg"><div class="seg-bar" style="width:${pct}%"></div></div><div class="seg-med">${fmtDur(s.med)}</div>${s.n>1?`<div class="seg-range">${fmtDur(s.min)}–${fmtDur(s.max)}</div>`:'<div class="seg-range">1 sample</div>'}</div>`;
+    });
+    segsEl.innerHTML = html+'</div>';
+  } else { segsEl.innerHTML=''; }
+}
+
+// ── Shared time filters ──────────────────────────────────────────────────────
+// Shared across Insights and History tabs
+const timeFilters = {
+  days: new Set(),        // 0=Sun … 6=Sat; empty = all
+  timeFrom: '',           // 'HH:MM' or ''
+  timeTo:   '',           // 'HH:MM' or ''
+};
+
+const DAY_LABELS = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+function hasActiveTimeFilter() {
+  return timeFilters.days.size > 0 || timeFilters.timeFrom || timeFilters.timeTo;
+}
+
+function applyTimeFilters(tripList) {
+  return tripList.filter(trip => {
+    const d = new Date(trip.startedAt);
+    if (timeFilters.days.size > 0 && !timeFilters.days.has(d.getDay())) return false;
+    if (timeFilters.timeFrom || timeFilters.timeTo) {
+      const mins = d.getHours() * 60 + d.getMinutes();
+      if (timeFilters.timeFrom) {
+        const [fh, fm] = timeFilters.timeFrom.split(':').map(Number);
+        if (mins < fh * 60 + fm) return false;
+      }
+      if (timeFilters.timeTo) {
+        const [th, tm] = timeFilters.timeTo.split(':').map(Number);
+        if (mins > th * 60 + tm) return false;
+      }
+    }
+    return true;
+  });
+}
+
+function renderFilterPanel(containerId, callbackName) {
+  const el = document.getElementById(containerId); if (!el) return;
+  const isHistory = containerId === 'hist-time-filter-panel';
+  const active = hasActiveTimeFilter() || (isHistory && histFilter !== 'all');
+  const isOpen = filterPanelOpen[containerId];
+
+  let html = '<div class="filter-panel">';
+  // Header row — always visible
+  html += `<div class="filter-panel-row" style="margin-bottom:${isOpen?'8px':'0'};cursor:pointer;" onclick="toggleFilterPanel('${containerId}','${callbackName}')">`;
+  html += `<span class="filter-panel-label" style="cursor:pointer;">Filters</span>`;
+  if (active && !isOpen) {
+    const n = filterActiveCount() + (isHistory && histFilter !== 'all' ? 1 : 0);
+    html += `<span class="filter-active-badge">${n} active</span>`;
+  }
+  html += `<span style="margin-left:auto;font-size:11px;color:var(--text3);">${isOpen ? '▲ Hide' : '▼ Show'}</span>`;
+  html += '</div>';
+
+  if (isOpen) {
+    // Route type row (history only)
+    if (isHistory) {
+      const seen = new Map();
+      trips.forEach(t => {
+        const td = getType(t.type); if (!td) return;
+        if (!seen.has(t.type)) seen.set(t.type, td);
+      });
+      if (seen.size > 1) {
+        html += '<div class="filter-panel-row" style="flex-wrap:wrap;"><span class="filter-panel-label">Route</span>';
+        html += `<button class="day-chip${histFilter==='all'?' active':''}" style="width:auto;padding:0 10px;" onclick="setHistFilter('all','${containerId}','${callbackName}')">All</button>`;
+        seen.forEach((td, typeId) => {
+          html += `<button class="day-chip${histFilter===typeId?' active':''}" style="width:auto;padding:0 8px;font-size:12px;" onclick="setHistFilter('${typeId}','${containerId}','${callbackName}')">${td.icon} ${td.name}</button>`;
+        });
+        html += '</div>';
+      }
+    }
+
+    // Day of week row
+    html += '<div class="filter-panel-row"><span class="filter-panel-label">Day</span>';
+    DAY_LABELS.forEach((lbl, i) => {
+      const isActive = timeFilters.days.has(i);
+      html += `<button class="day-chip${isActive?' active':''}" onclick="toggleDay(${i},'${containerId}','${callbackName}')">${lbl}</button>`;
+    });
+    html += '</div>';
+
+    // Time range row
+    html += '<div class="filter-panel-row"><span class="filter-panel-label">Time</span>';
+    html += `<input class="time-input" type="time" value="${timeFilters.timeFrom}" onchange="setTimeFilter('from',this.value,'${containerId}','${callbackName}')">`;
+    html += `<span style="font-size:13px;color:var(--text3);">–</span>`;
+    html += `<input class="time-input" type="time" value="${timeFilters.timeTo}" onchange="setTimeFilter('to',this.value,'${containerId}','${callbackName}')">`;
+    if (active) {
+      html += `<button class="filter-clear" onclick="clearAllFilters('${containerId}','${callbackName}')">Clear all</button>`;
+    }
+    html += '</div>';
+  }
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function setHistFilter(val, containerId, callbackName) {
+  histFilter = val;
+  renderFilterPanel(containerId, callbackName);
+  window[callbackName]();
+}
+
+function filterActiveCount() {
+  let n = timeFilters.days.size;
+  if (timeFilters.timeFrom) n++;
+  if (timeFilters.timeTo) n++;
+  return n;
+}
+
+const filterPanelOpen = {};
+
+function toggleFilterPanel(containerId, callbackName) {
+  filterPanelOpen[containerId] = !filterPanelOpen[containerId];
+  renderFilterPanel(containerId, callbackName);
+}
+
+function toggleDay(day, containerId, callbackName) {
+  if (timeFilters.days.has(day)) timeFilters.days.delete(day);
+  else timeFilters.days.add(day);
+  renderFilterPanel(containerId, callbackName);
+  window[callbackName]();
+}
+
+function setTimeFilter(which, val, containerId, callbackName) {
+  if (which === 'from') timeFilters.timeFrom = val;
+  else timeFilters.timeTo = val;
+  renderFilterPanel(containerId, callbackName);
+  window[callbackName]();
+}
+
+function clearTimeFilters(containerId, callbackName) {
+  timeFilters.days.clear();
+  timeFilters.timeFrom = '';
+  timeFilters.timeTo = '';
+  renderFilterPanel(containerId, callbackName);
+  window[callbackName]();
+}
+
+function clearAllFilters(containerId, callbackName) {
+  timeFilters.days.clear();
+  timeFilters.timeFrom = '';
+  timeFilters.timeTo = '';
+  if (containerId === 'hist-time-filter-panel') histFilter = 'all';
+  renderFilterPanel(containerId, callbackName);
+  window[callbackName]();
+}
+
+// ── Insights tab ─────────────────────────────────────────────────────────────
+function renderInsights() {
+  renderFilterPanel('insights-filter-panel', 'renderInsights');
+  const body = document.getElementById('insights-body');
+  body.innerHTML = '';
+  const filtered = applyTimeFilters(trips);
+  const byType = {};
+  filtered.forEach(t=>{ if(!byType[t.type])byType[t.type]=[]; byType[t.type].push(t); });
+  if (!Object.keys(byType).length) {
+    body.innerHTML = hasActiveTimeFilter()
+      ? '<div class="empty">No trips match these filters.</div>'
+      : '<div class="empty">No trips yet.</div>';
+    return;
+  }
+  const order=['commute','flight','custom'];
+  Object.entries(byType)
+    .sort(([a],[b])=>order.indexOf((getType(a)||{group:'custom'}).group)-order.indexOf((getType(b)||{group:'custom'}).group))
+    .forEach(([type,ts])=>{
+      const td=getType(type); if(!td) return;
+      const repTrip = ts[0];
+      const icps = repTrip && repTrip.checkpoints ? repTrip.checkpoints.map(c=>c.name) : getCps(type);
+      const segs=[]; let maxMed=0;
+      for(let i=0;i<icps.length-1;i++){const s=segStats(ts,i,i+1);if(s){maxMed=Math.max(maxMed,s.med);segs.push({label:`${icps[i]} → ${icps[i+1]}`,s});}}
+      const total=segStats(ts,0,icps.length-1);
+      const card=document.createElement('div'); card.className='insight-card';
+      let html=`<div class="insight-header"><div class="insight-title">${td.icon} ${td.name}</div><div class="insight-meta">${ts.length} trip${ts.length>1?'s':''}</div></div>`;
+      if(total) html+=`<div class="insight-total">Total median: <strong>${fmtDur(total.med)}</strong></div>`;
+      segs.forEach(({label,s})=>{const pct=maxMed>0?Math.round(s.med/maxMed*100):0;html+=`<div class="seg-row"><div class="seg-label">${label}</div><div class="seg-bar-bg"><div class="seg-bar" style="width:${pct}%"></div></div><div class="seg-med">${fmtDur(s.med)}</div>${s.n>1?`<div class="seg-range">${fmtDur(s.min)}–${fmtDur(s.max)}</div>`:'<div class="seg-range">1 sample</div>'}</div>`;});
+      card.innerHTML=html; body.appendChild(card);
+    });
+}
+
+// ── History tab ───────────────────────────────────────────────────────────────
+// Track which items are expanded and which are in edit mode
+const expandedTrips = new Set();
+const editingTrips = new Set();
+let histFilter = 'all'; // 'all' | type id
+
+function renderHistory() {
+  renderFilterPanel('hist-time-filter-panel', 'renderHistory');
+  const body = document.getElementById('history-body');
+  body.innerHTML = '';
+  let filtered = histFilter === 'all' ? trips : trips.filter(t => t.type === histFilter);
+  filtered = applyTimeFilters(filtered);
+  if (!filtered.length) {
+    const anyTrips = histFilter === 'all' ? trips.length : trips.filter(t=>t.type===histFilter).length;
+    body.innerHTML = anyTrips > 0 && hasActiveTimeFilter()
+      ? '<div class="empty">No trips match these filters.</div>'
+      : '<div class="empty">No trips for this route yet.</div>';
+    return;
+  }
+  filtered.forEach(trip => {
+    const td = getType(trip.type); if (!td) return;
+    const item = buildHistItem(trip, td);
+    body.appendChild(item);
+  });
+}
+
+function buildHistItem(trip, td) {
+  const dur = getTripDur(trip);
+  const logged = trip.checkpoints.filter(c=>c.time!=null).length;
+  const variantLabel = trip.variantKey && td.variants ? ' · ' + td.variants[trip.variantKey].label : '';
+  const isExpanded = expandedTrips.has(trip.id);
+  const isEditing = editingTrips.has(trip.id);
+
+  const item = document.createElement('div');
+  item.className = 'hist-item' + (isExpanded ? ' expanded' : '');
+  item.id = 'hist-item-' + trip.id;
+
+  // Summary row
+  const row = document.createElement('div');
+  row.className = 'hist-row';
+  const commentSnippet = trip.comment ? `<div class="hist-comment">${escHtml(trip.comment)}</div>` : '';
+  row.innerHTML = `
+    <span class="hist-chevron">▶</span>
+    <div class="hist-icon">${td.icon}</div>
+    <div class="hist-meta">
+      <div class="hist-name">${td.name}${variantLabel}</div>
+      <div class="hist-sub">${fmtDate(trip.startedAt)} · ${logged}/${trip.checkpoints.length} checkpoints</div>
+      ${commentSnippet}
+    </div>
+    <div class="hist-dur">${dur ? fmtDur(dur) : '—'}</div>
+  `;
+  row.onclick = () => toggleTrip(trip.id);
+  item.appendChild(row);
+
+  // Detail panel
+  const detail = document.createElement('div');
+  detail.className = 'hist-detail';
+  detail.appendChild(buildDetailContent(trip, isEditing));
+  item.appendChild(detail);
+
+  return item;
+}
+
+function buildDetailContent(trip, editing) {
+  const frag = document.createDocumentFragment();
+  const tripDate = new Date(trip.startedAt);
+  const dateStr = tripDate.toLocaleDateString('en-CA');
+
+  if (!editing) {
+    trip.checkpoints.forEach((cp, i) => {
+      const cpRow = document.createElement('div');
+      cpRow.className = 'hist-cp-row';
+      const nameClass = cp.skipped ? 'hist-cp-name skipped' : 'hist-cp-name';
+      const timeStr = cp.skipped ? 'skipped' : (cp.time ? fmtTime(cp.time) : '—');
+      cpRow.innerHTML = `<span class="${nameClass}">${cp.name}</span><span class="hist-cp-time">${timeStr}</span>`;
+      frag.appendChild(cpRow);
+      if (i < trip.checkpoints.length-1 && cp.time!=null && trip.checkpoints[i+1].time!=null) {
+        const gap = document.createElement('div');
+        gap.className = 'hist-cp-gap';
+        gap.textContent = fmtDur(trip.checkpoints[i+1].time - cp.time);
+        frag.appendChild(gap);
+      }
+    });
+  } else {
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:12px;color:var(--text2);padding:8px 16px 4px;';
+    hint.textContent = 'Leave blank to clear a checkpoint.';
+    frag.appendChild(hint);
+    trip.checkpoints.forEach((cp, i) => {
+      const val = cp.time ? new Date(cp.time).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '';
+      const cpRow = document.createElement('div');
+      cpRow.className = 'hist-cp-row';
+      cpRow.innerHTML = `<span class="hist-cp-name" style="font-size:13px;">${cp.name}</span><input class="hist-cp-input" type="time" data-idx="${i}" value="${val}">`;
+      frag.appendChild(cpRow);
+    });
+  }
+
+  // Comment section
+  if (!editing) {
+    if (trip.comment) {
+      const commentDiv = document.createElement('div');
+      commentDiv.style.cssText = 'padding:8px 16px 10px;border-top:0.5px solid var(--border);';
+      commentDiv.innerHTML = `<div style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Note</div><div style="font-size:13px;color:var(--text2);line-height:1.5;">${escHtml(trip.comment)}</div>`;
+      frag.appendChild(commentDiv);
+    }
+  } else {
+    const commentWrap = document.createElement('div');
+    commentWrap.style.cssText = 'padding:10px 16px;border-top:0.5px solid var(--border);';
+    commentWrap.innerHTML = `<div style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Note</div><textarea class="hist-comment-area" id="comment-${trip.id}" rows="2" placeholder="Optional note about this trip…">${escHtml(trip.comment || '')}</textarea>`;
+    frag.appendChild(commentWrap);
+  }
+
+  // Footer actions
+  const footer = document.createElement('div');
+  footer.className = 'hist-detail-footer';
+  if (!editing) {
+    footer.innerHTML = `
+      <button class="btn btn-ghost btn-sm" onclick="startInlineEdit(${trip.id})">Edit</button>
+      <button class="btn btn-danger btn-sm" onclick="confirmDeleteInline(${trip.id})">Delete</button>
+    `;
+  } else {
+    footer.innerHTML = `
+      <button class="btn btn-primary btn-sm" onclick="saveInlineEdit(${trip.id})">Save</button>
+      <button class="btn btn-ghost btn-sm" onclick="cancelInlineEdit(${trip.id})">Cancel</button>
+    `;
+  }
+  frag.appendChild(footer);
+  return frag;
+}
+
+function toggleTrip(id) {
+  if (expandedTrips.has(id)) { expandedTrips.delete(id); } else { expandedTrips.add(id); }
+  refreshHistItem(id);
+}
+
+function expandAllTrips() {
+  trips.forEach(t => expandedTrips.add(t.id));
+  renderHistory();
+}
+
+function collapseAllTrips() {
+  expandedTrips.clear();
+  editingTrips.clear();
+  renderHistory();
+}
+
+function refreshHistItem(id) {
+  const trip = trips.find(t=>t.id===id); if(!trip) return;
+  const td = getType(trip.type); if(!td) return;
+  const old = document.getElementById('hist-item-' + id);
+  if (!old) return;
+  const fresh = buildHistItem(trip, td);
+  old.parentNode.replaceChild(fresh, old);
+}
+
+function startInlineEdit(id) {
+  editingTrips.add(id);
+  refreshHistItem(id);
+}
+
+function cancelInlineEdit(id) {
+  editingTrips.delete(id);
+  refreshHistItem(id);
+}
+
+function saveInlineEdit(id) {
+  const trip = trips.find(t=>t.id===id); if(!trip) return;
+  const item = document.getElementById('hist-item-' + id); if(!item) return;
+  const inputs = item.querySelectorAll('.hist-cp-input');
+  const tripDate = new Date(trip.startedAt);
+  const dateStr = tripDate.toLocaleDateString('en-CA');
+  let valid = true;
+  inputs.forEach((input, i) => {
+    const val = input.value.trim();
+    if (val === '') {
+      trip.checkpoints[i].time = null;
+    } else {
+      const ts = new Date(`${dateStr}T${val}:00`).getTime();
+      if (isNaN(ts)) { valid = false; input.style.borderColor='#c0392b'; return; }
+      trip.checkpoints[i].time = ts;
+    }
+  });
+  if (!valid) return;
+  // Save comment
+  const commentEl = item.querySelector('#comment-' + id);
+  if (commentEl) {
+    const c = commentEl.value.trim();
+    trip.comment = c || undefined;
+  }
+  persist();
+  editingTrips.delete(id);
+  refreshHistItem(id);
+}
+
+function confirmDeleteInline(id) {
+  deleteId = id;
+  document.getElementById('modal-confirm').classList.add('open');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+function doDelete() {
+  trips = trips.filter(t=>t.id!==deleteId);
+  expandedTrips.delete(deleteId);
+  editingTrips.delete(deleteId);
+  persist(); closeModal('modal-confirm'); renderHistory();
+}
+
+// ── Add route ─────────────────────────────────────────────────────────────────
+let addModalMode = 'route'; // 'route' or 'flight'
+
+// Default departure checkpoints (substituting {AIRPORT} and {CITY} placeholders)
+const DEP_CPS_TPL = ['Left {CITY}','Called Uber','Uber/car arrived','Arrived at {AIRPORT}','Through security','At gate'];
+const ARR_CPS_TPL = ['Landed at {AIRPORT}','Deplaned','Arrived at baggage claim','Baggage claimed','Called Uber','Uber/car arrived','Arrived at {CITY}'];
+
+function applyFlightTpl(tpl, city, airport) {
+  return tpl.map(s => s.replace('{CITY}', city || 'city').replace('{AIRPORT}', airport || 'AIRPORT'));
+}
+
+function openAddModal(mode) {
+  addModalMode = mode;
+  document.getElementById('modal-route-title').textContent = mode === 'flight' ? 'Add flight route' : 'Add route';
+  document.getElementById('modal-flight-fields').style.display = mode === 'flight' ? 'block' : 'none';
+  document.getElementById('modal-route-fields').style.display = mode === 'route' ? 'block' : 'none';
+
+  if (mode === 'flight') {
+    document.getElementById('new-flight-city').value = '';
+    document.getElementById('new-flight-airport').value = '';
+    populateCpList('new-dep-cp-list', applyFlightTpl(DEP_CPS_TPL, '', ''), getDynamicIndices(DEP_CPS_TPL));
+    populateCpList('new-arr-cp-list', applyFlightTpl(ARR_CPS_TPL, '', ''), getDynamicIndices(ARR_CPS_TPL));
+    // Live-update step values as user types city/airport
+    ['new-flight-city','new-flight-airport'].forEach(id => {
+      document.getElementById(id).addEventListener('input', updateFlightDefaultCps);
+    });
+  } else {
+    document.getElementById('new-route-origin').value = '';
+    document.getElementById('new-route-dest').value = '';
+    const list = document.getElementById('new-cp-list'); list.innerHTML = '';
+    // Will populate after user fills in origin/dest — seed with placeholders for now
+    addCpFieldTo('new-cp-list', 'Left [origin]');
+    addCpFieldTo('new-cp-list', 'Arrived at [destination]');
+    // Live-update default steps as user types origin/dest
+    ['new-route-origin','new-route-dest'].forEach(id => {
+      document.getElementById(id).addEventListener('input', updateRouteDefaultCps);
+    });
+  }
+  document.getElementById('modal-route').classList.add('open');
+}
+
+function getDynamicIndices(tpl) {
+  const s = new Set();
+  tpl.forEach((t, i) => { if (t.includes('{CITY}') || t.includes('{AIRPORT}')) s.add(i); });
+  return s;
+}
+
+function updateFlightDefaultCps() {
+  const city    = document.getElementById('new-flight-city').value.trim();
+  const airport = document.getElementById('new-flight-airport').value.trim().toUpperCase();
+  const depVals = applyFlightTpl(DEP_CPS_TPL, city, airport);
+  const arrVals = applyFlightTpl(ARR_CPS_TPL, city, airport);
+  const depIndices = getDynamicIndices(DEP_CPS_TPL);
+  const arrIndices = getDynamicIndices(ARR_CPS_TPL);
+  const looksLikeTemplate = (val, tplVal) => {
+    if (!val || val === tplVal) return true;
+    return DEP_CPS_TPL.concat(ARR_CPS_TPL).some(t =>
+      t.includes('{CITY}') || t.includes('{AIRPORT}')
+        ? new RegExp('^' + t.replace('{CITY}','.*').replace('{AIRPORT}','.*') + '$').test(val)
+        : false
+    );
+  };
+  const depInputs = document.querySelectorAll('#new-dep-cp-list .cp-edit-input');
+  const arrInputs = document.querySelectorAll('#new-arr-cp-list .cp-edit-input');
+  depInputs.forEach((inp, i) => {
+    if (i < depVals.length && looksLikeTemplate(inp.value, depVals[i])) {
+      inp.value = depVals[i];
+      inp.classList.toggle('cp-input-dynamic', depIndices.has(i));
+    }
+  });
+  arrInputs.forEach((inp, i) => {
+    if (i < arrVals.length && looksLikeTemplate(inp.value, arrVals[i])) {
+      inp.value = arrVals[i];
+      inp.classList.toggle('cp-input-dynamic', arrIndices.has(i));
+    }
+  });
+}
+
+function updateRouteDefaultCps() {
+  const origin = document.getElementById('new-route-origin').value.trim() || 'origin';
+  const dest   = document.getElementById('new-route-dest').value.trim()   || 'destination';
+  const inputs = document.querySelectorAll('#new-cp-list .cp-edit-input');
+  if (inputs.length >= 1) inputs[0].placeholder = 'Left ' + origin;
+  if (inputs.length >= 2) inputs[inputs.length-1].placeholder = 'Arrived at ' + dest;
+}
+
+function populateCpList(listId, cps, dynamicIndices) {
+  const list = document.getElementById(listId); list.innerHTML = '';
+  cps.forEach((cp, i) => {
+    const isDynamic = dynamicIndices ? dynamicIndices.has(i) : false;
+    addCpFieldTo(listId, '', cp, isDynamic);
+  });
+}
+
+function addCpFieldTo(listId, placeholder, value, dynamic) {
+  const list = document.getElementById(listId); if (!list) return;
+  const row = document.createElement('div'); row.className = 'cp-edit-row';
+  const ph = placeholder || 'Checkpoint name';
+  const val = value || '';
+  const dynClass = dynamic ? ' cp-input-dynamic' : '';
+  row.innerHTML = `<input class="cp-edit-input${dynClass}" placeholder="${ph}" value="${val}"><button class="cp-edit-del" onclick="this.parentElement.remove()">\xd7</button>`;
+  list.appendChild(row);
+}
+
+// Keep old name for backward compat
+function addCpField(placeholder) { addCpFieldTo('new-cp-list', placeholder); }
+
+function saveNewRoute() {
+  const now = Date.now();
+  if (addModalMode === 'flight') {
+    const city    = document.getElementById('new-flight-city').value.trim();
+    const airport = document.getElementById('new-flight-airport').value.trim().toUpperCase();
+    if (!city || !airport) { alert('Please enter both a city and airport code.'); return; }
+    const depCps = Array.from(document.querySelectorAll('#new-dep-cp-list .cp-edit-input')).map(i=>i.value.trim()).filter(Boolean);
+    const arrCps = Array.from(document.querySelectorAll('#new-arr-cp-list .cp-edit-input')).map(i=>i.value.trim()).filter(Boolean);
+    if (depCps.length < 2 && arrCps.length < 2) { alert('Please add at least 2 steps to at least one direction.'); return; }
+    const depId = 'custom-flight-' + now + '-dep';
+    const arrId = 'custom-flight-' + (now+1) + '-arr';
+    if (depCps.length >= 2) customRoutes[depId] = { name: city+' \xb7 Departure', city, airport, icon: '\u2708\uFE0F', group: 'custom-flight', dir: 'dep', cps: depCps };
+    if (arrCps.length >= 2) customRoutes[arrId] = { name: city+' \xb7 Arrival',   city, airport, icon: '\uD83D\uDEEC', group: 'custom-flight', dir: 'arr', cps: arrCps };
+    persist(); closeModal('modal-route'); renderTripGrid();
+    const body = document.getElementById('custom-flights-body');
+    if (!body.classList.contains('open')) toggleSection('custom-flights-toggle','custom-flights-body');
+  } else {
+    const origin = document.getElementById('new-route-origin').value.trim();
+    const dest   = document.getElementById('new-route-dest').value.trim();
+    if (!origin || !dest) { alert('Please enter both an origin and destination.'); return; }
+    const cps = Array.from(document.querySelectorAll('#new-cp-list .cp-edit-input')).map(i=>i.value.trim()).filter(Boolean);
+    if (cps.length < 2) { alert('Please add at least 2 checkpoints.'); return; }
+    const name = origin + ' \u2192 ' + dest;
+    const id = 'custom-' + now;
+    customRoutes[id] = { name, origin, dest, icon: '\uD83D\uDDFA\uFE0F', group: 'custom', cps };
+    persist(); closeModal('modal-route'); renderTripGrid();
+    const body = document.getElementById('custom-body');
+    if (!body.classList.contains('open')) toggleCustom();
+  }
+}
+
+// ── Export / Import ───────────────────────────────────────────────────────────
+function exportData() {
+  if(!trips.length&&!Object.keys(customRoutes).length){showBanner('Nothing to export yet.',false);return;}
+  const blob=new Blob([JSON.stringify({version:2,exportedAt:Date.now(),trips,customRoutes},null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=`commute-tracker-${new Date().toISOString().slice(0,10)}.json`;
+  a.click(); URL.revokeObjectURL(url);
+  showBanner(`Exported ${trips.length} trips successfully.`,true);
+}
+
+function importData(e) {
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      const data=JSON.parse(ev.target.result);
+      let incoming=[],incomingRoutes={};
+      if(Array.isArray(data)){incoming=data;}
+      else if(data.trips){incoming=data.trips||[];incomingRoutes=data.customRoutes||{};}
+      else{showBanner('Unrecognized file format.',false);return;}
+      const existIds=new Set(trips.map(t=>t.id));
+      const newTrips=incoming.filter(t=>t.id&&t.type&&t.checkpoints&&!existIds.has(t.id));
+      const dupes=incoming.length-newTrips.length;
+      const existRouteIds=new Set(Object.keys(customRoutes));
+      let newRoutes=0;
+      Object.entries(incomingRoutes).forEach(([id,r])=>{if(!existRouteIds.has(id)){customRoutes[id]=r;newRoutes++;}});
+      trips=[...trips,...newTrips].sort((a,b)=>b.startedAt-a.startedAt);
+      persist(); renderHistory(); renderTripGrid();
+      let msg=`Imported ${newTrips.length} trip${newTrips.length!==1?'s':''}.`;
+      if(dupes>0) msg+=` ${dupes} duplicate${dupes>1?'s':''} skipped.`;
+      if(newRoutes>0) msg+=` ${newRoutes} custom route${newRoutes>1?'s':''} added.`;
+      showBanner(msg,true);
+    }catch(err){showBanner('Could not read file.',false);}
+  };
+  reader.readAsText(file); e.target.value='';
+}
+
+function showBanner(msg,success){
+  const b=document.getElementById('import-banner');
+  b.textContent=msg; b.style.display='block';
+  b.style.background=success?'var(--green-bg)':'var(--amber-bg)';
+  b.style.color=success?'var(--green)':'var(--amber)';
+  setTimeout(()=>b.style.display='none',4000);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtTime(ts){return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
+function fmtDate(ts){return new Date(ts).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric',year:'numeric'});}
+function fmtDur(ms){const m=Math.round(ms/60000);return m<60?m+'m':Math.floor(m/60)+'h '+(m%60)+'m';}
+function getTripDur(trip){const t=trip.checkpoints.filter(c=>c.time!=null).map(c=>c.time);if(t.length<2)return null;return Math.max(...t)-Math.min(...t);}
+function segStats(tripList,from,to){
+  const d=tripList.flatMap(tr=>{const cps=tr.checkpoints;return(cps.length>to&&cps[from]&&cps[to]&&cps[from].time&&cps[to].time)?[cps[to].time-cps[from].time]:[];}).sort((a,b)=>a-b);
+  if(!d.length)return null;
+  return{med:d[Math.floor(d.length/2)],min:d[0],max:d[d.length-1],n:d.length};
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+renderTripGrid();
+</script>
+</body>
+</html>
