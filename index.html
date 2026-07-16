@@ -392,7 +392,7 @@ const BUILTIN = {
   'commute-am': {
     name:'Morning commute', icon:'\u{1F305}', group:'commute',
     variants: {
-      transit: { label:'Train', cps:['Left home','Arrived at station','Boarded train','Train departure','Train arrived at GCT','Arrived at office'] },
+      transit: { label:'Train', cps:['Left home','Boarded train','Train departure','Train arrived at GCT','Arrived at office'] },
       drive:   { label:'Car',   cps:['Left home','Called Uber','Uber/car arrived','Arrived at office'] },
     },
     defaultVariant: 'transit',
@@ -400,7 +400,7 @@ const BUILTIN = {
   'commute-pm': {
     name:'Evening commute', icon:'\u{1F306}', group:'commute',
     variants: {
-      transit: { label:'Train', cps:['Left office','Arrived at GCT','Boarded train','Train departure','Arrived at station','Arrived home'] },
+      transit: { label:'Train', cps:['Left office','Boarded train','Train departure','Arrived at station','Arrived home'] },
       drive:   { label:'Car',   cps:['Left office','Called Uber','Uber/car arrived','Arrived home'] },
     },
     defaultVariant: 'transit',
@@ -444,10 +444,46 @@ function persistActiveTrip() {
   if (activeTrip) localStorage.setItem('ct-active-trip-v2', JSON.stringify(activeTrip));
   else localStorage.removeItem('ct-active-trip-v2');
 }
+function normalizeLegacyTrip(trip) {
+  if (!trip || !Array.isArray(trip.checkpoints)) return trip;
+  const normalized = { ...trip, checkpoints: trip.checkpoints.map(c => ({ ...c })) };
+  const legacyPairs = {
+    'commute-am': [['Arrived at station', 'Boarded train']],
+    'commute-pm': [['Arrived at GCT', 'Boarded train']],
+  };
+  let changed = false;
+  (legacyPairs[normalized.type] || []).forEach(([dropName, keepName]) => {
+    const dropIdx = normalized.checkpoints.findIndex(c => c.name === dropName);
+    const keepIdx = normalized.checkpoints.findIndex(c => c.name === keepName);
+    if (dropIdx === -1 || keepIdx === -1) return;
+    const dropCp = normalized.checkpoints[dropIdx];
+    const keepCp = normalized.checkpoints[keepIdx];
+    if (keepCp.time == null && dropCp.time != null) {
+      keepCp.time = dropCp.time;
+      keepCp.skipped = false;
+    } else if (!keepCp.skipped && keepCp.time == null && dropCp.skipped) {
+      keepCp.skipped = true;
+    }
+    normalized.checkpoints.splice(dropIdx, 1);
+    normalized.variantKey = normalized.variantKey || 'transit';
+    changed = true;
+  });
+  return changed ? normalized : trip;
+}
 function hydrate() {
   try { trips = JSON.parse(localStorage.getItem('ct-trips-v2') || '[]'); } catch(e) { trips=[]; }
   try { customRoutes = JSON.parse(localStorage.getItem('ct-routes-v2') || '{}'); } catch(e) { customRoutes={}; }
   try { activeTrip = JSON.parse(localStorage.getItem('ct-active-trip-v2') || 'null'); } catch(e) { activeTrip=null; }
+  const normalizedTrips = trips.map(normalizeLegacyTrip);
+  if (JSON.stringify(normalizedTrips) !== JSON.stringify(trips)) {
+    trips = normalizedTrips;
+    persist();
+  }
+  if (activeTrip) {
+    const previousActiveTrip = JSON.stringify(activeTrip);
+    activeTrip = normalizeLegacyTrip(activeTrip);
+    if (JSON.stringify(activeTrip) !== previousActiveTrip) persistActiveTrip();
+  }
   if (activeTrip && activeTrip.type) selectedType = activeTrip.type;
 }
 hydrate();
@@ -1336,7 +1372,7 @@ function importData(e) {
       else if(data.trips){incoming=data.trips||[];incomingRoutes=data.customRoutes||{};}
       else{showBanner('Unrecognized file format.',false);return;}
       const existIds=new Set(trips.map(t=>t.id));
-      const newTrips=incoming.filter(t=>t.id&&t.type&&t.checkpoints&&!existIds.has(t.id));
+      const newTrips=incoming.filter(t=>t.id&&t.type&&t.checkpoints&&!existIds.has(t.id)).map(normalizeLegacyTrip);
       const dupes=incoming.length-newTrips.length;
       const existRouteIds=new Set(Object.keys(customRoutes));
       let newRoutes=0;
