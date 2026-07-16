@@ -440,9 +440,15 @@ function persist() {
   localStorage.setItem('ct-trips-v2', JSON.stringify(trips));
   localStorage.setItem('ct-routes-v2', JSON.stringify(customRoutes));
 }
+function persistActiveTrip() {
+  if (activeTrip) localStorage.setItem('ct-active-trip-v2', JSON.stringify(activeTrip));
+  else localStorage.removeItem('ct-active-trip-v2');
+}
 function hydrate() {
   try { trips = JSON.parse(localStorage.getItem('ct-trips-v2') || '[]'); } catch(e) { trips=[]; }
   try { customRoutes = JSON.parse(localStorage.getItem('ct-routes-v2') || '{}'); } catch(e) { customRoutes={}; }
+  try { activeTrip = JSON.parse(localStorage.getItem('ct-active-trip-v2') || 'null'); } catch(e) { activeTrip=null; }
+  if (activeTrip && activeTrip.type) selectedType = activeTrip.type;
 }
 hydrate();
 
@@ -598,10 +604,26 @@ function startTrip() {
   // store which variant was used so history can display it correctly
   const variantKey = td.variants ? (commuteVariants[selectedType] || td.defaultVariant) : null;
   activeTrip = { id: Date.now(), type: selectedType, variantKey, startedAt: Date.now(), checkpoints: cps.map(n=>({name:n,time:null,skipped:false})) };
+  persistActiveTrip();
+  showActiveTrip();
+}
+
+function showActiveTrip() {
+  if (!activeTrip) return;
+  const td = getType(activeTrip.type);
+  if (!td) {
+    activeTrip = null;
+    selectedType = null;
+    persistActiveTrip();
+    return;
+  }
+  selectedType = activeTrip.type;
   document.getElementById('step-choose').style.display = 'none';
   document.getElementById('step-log').style.display = 'block';
   document.getElementById('log-icon').textContent = td.icon;
-  document.getElementById('log-title').textContent = td.name + (variantKey ? ' · ' + td.variants[variantKey].label : '');
+  const variantKey = activeTrip.variantKey;
+  const variantLabel = variantKey && td.variants && td.variants[variantKey] ? ' · ' + td.variants[variantKey].label : '';
+  document.getElementById('log-title').textContent = td.name + variantLabel;
   renderActiveCPs();
 }
 
@@ -668,6 +690,7 @@ function logCP(i) {
   const cps = activeTrip.checkpoints;
   cps[i].time = Date.now();
   cps[i].skipped = false;
+  persistActiveTrip();
   renderActiveCPs();
 }
 
@@ -675,6 +698,7 @@ function skipCP(i) {
   const cps = activeTrip.checkpoints;
   cps[i].time = null;
   cps[i].skipped = true;
+  persistActiveTrip();
   renderActiveCPs();
 }
 
@@ -682,6 +706,7 @@ function undoCP(i) {
   const cps = activeTrip.checkpoints;
   cps[i].time = null;
   cps[i].skipped = false;
+  persistActiveTrip();
   renderActiveCPs();
 }
 
@@ -692,6 +717,7 @@ function saveTrip() {
 
 function discardTrip() {
   activeTrip = null; selectedType = null;
+  persistActiveTrip();
   document.getElementById('step-choose').style.display = 'block';
   document.getElementById('step-log').style.display = 'none';
   renderTripGrid();
@@ -1350,6 +1376,7 @@ function segStats(tripList,from,to){
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 renderTripGrid();
+showActiveTrip();
 </script>
 </body>
 </html>
