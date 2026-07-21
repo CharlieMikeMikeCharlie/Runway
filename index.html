@@ -280,7 +280,7 @@
         <select id="plan-type" class="suggest-input" style="flex:1;" onchange="handlePlanTypeChange()"></select>
       </div>
       <div class="suggest-field">
-        <label>Need to arrive by</label>
+        <label id="plan-time-label">Need to arrive by</label>
         <input type="time" id="plan-arrive" class="suggest-input" onchange="renderPlan()">
       </div>
       <div class="suggest-field">
@@ -802,6 +802,7 @@ function renderPlanTab() {
   if (!arrive.value) {
     arrive.value = PLAN_DEFAULT_ARRIVE[sel.value] || defaultPlanTime();
   }
+  updatePlanTimeLabel(sel.value);
   renderPlan();
 }
 
@@ -814,7 +815,16 @@ function handlePlanTypeChange() {
   const typeId = document.getElementById('plan-type').value;
   const arrive = document.getElementById('plan-arrive');
   if (PLAN_DEFAULT_ARRIVE[typeId]) arrive.value = PLAN_DEFAULT_ARRIVE[typeId];
+  updatePlanTimeLabel(typeId);
   renderPlan();
+}
+
+function updatePlanTimeLabel(typeId) {
+  const label = document.getElementById('plan-time-label');
+  if (!label) return;
+  if (typeId === 'commute-am') label.textContent = 'Train departs at';
+  else if (typeId === 'commute-pm') label.textContent = 'Board train by';
+  else label.textContent = 'Need to arrive by';
 }
 
 function renderPlan() {
@@ -864,46 +874,69 @@ function isTrainCommute(typeId) {
   return typeId === 'commute-am' || typeId === 'commute-pm';
 }
 
-function renderTrainPlan(typeId, tripsOf, arriveTs, buffer, resultEl, segsEl) {
-  const trainTrips = tripsOf.filter(t => hasCheckpoint(t, 'Train departure'));
-  const preTrain = namedSegStats(trainTrips, firstCheckpointName, 'Train departure');
-  const postTrain = namedSegStats(trainTrips, 'Train departure', lastCheckpointName);
-  const schedule = getObservedTrainSchedule(trainTrips);
-  if (!preTrain || !postTrain || !schedule.length) {
-    resultEl.innerHTML = `<div class="suggest-result"><div style="font-size:14px;color:var(--text2);">No train schedule data yet. Log trips with a Train departure timestamp so the planner can learn which trains run.</div></div>`;
+function renderTrainPlan(typeId, tripsOf, targetTs, buffer, resultEl, segsEl) {
+  if (typeId === 'commute-am') {
+    renderMorningTrainPlan(tripsOf, targetTs, buffer, resultEl, segsEl);
+  } else {
+    renderEveningTrainPlan(tripsOf, targetTs, buffer, resultEl, segsEl);
+  }
+}
+
+function renderMorningTrainPlan(tripsOf, trainTs, buffer, resultEl, segsEl) {
+  const trainTrips = tripsOf.filter(t => hasCheckpoint(t, 'Arrived at station'));
+  const toPlatform = namedSegStats(trainTrips, firstCheckpointName, 'Arrived at station');
+  const platformToDeparture = namedSegStats(trainTrips, 'Arrived at station', 'Train departure');
+  if (!toPlatform) {
+    resultEl.innerHTML = `<div class="suggest-result"><div style="font-size:14px;color:var(--text2);">No morning platform-arrival data yet. Log Arrived at station so the planner can work backward from a specific train.</div></div>`;
     segsEl.innerHTML = ''; return;
   }
 
-  const targetTs = arriveTs.getTime() - buffer * 60000;
-  const candidates = schedule
-    .map(mins => {
-      const departTs = dateWithMinutes(arriveTs, mins).getTime();
-      return {
-        mins,
-        departTs,
-        leaveTs: departTs - preTrain.med,
-        arriveMedTs: departTs + postTrain.med,
-        arriveSlowTs: departTs + postTrain.max,
-      };
-    })
-    .sort((a,b) => a.departTs - b.departTs);
-  const viable = candidates.filter(c => c.arriveMedTs <= targetTs);
-  const choice = viable[viable.length - 1] || candidates[0];
-  const missesTarget = choice.arriveMedTs > targetTs;
-  const scheduleLabel = schedule.map(formatMinutes).join(', ');
+  const platformTargetTs = trainTs.getTime() - buffer * 60000;
+  const leaveTs = platformTargetTs - toPlatform.med;
+  const leaveSlowTs = platformTargetTs - toPlatform.max;
+  const schedule = getObservedTrainSchedule(tripsOf);
+  const scheduleLabel = schedule.length ? schedule.map(formatMinutes).join(', ') : '';
 
   resultEl.innerHTML = `<div class="suggest-result">
-    <div class="suggest-leave">Leave by ${fmtTime(choice.leaveTs)}</div>
-    <div class="suggest-sub">Take the ${formatMinutes(choice.mins)} train · expected arrival ${fmtTime(choice.arriveMedTs)}${buffer?` with ${buffer}min buffer`:''}</div>
-    <div class="suggest-sub" style="margin-top:4px;">Worst case: ${fmtTime(choice.arriveSlowTs)} after the train (${fmtDur(postTrain.max)} from train departure)</div>
-    ${missesTarget?`<div class="suggest-sub" style="margin-top:4px;color:var(--amber);">No learned train gets there by ${fmtTime(targetTs)} yet.</div>`:''}
-    <div class="suggest-sub" style="margin-top:4px;">Learned train times: ${scheduleLabel} · ${schedule.length} departure${schedule.length!==1?'s':''} from ${trainTrips.length} trip${trainTrips.length!==1?'s':''}</div>
+    <div class="suggest-leave">Leave by ${fmtTime(leaveTs)}</div>
+    <div class="suggest-sub">For the ${fmtTime(trainTs)} train, aim to reach the platform by ${fmtTime(platformTargetTs)}${buffer?` (${buffer}min buffer)`:''}</div>
+    <div class="suggest-sub" style="margin-top:4px;">Worst case: leave by ${fmtTime(leaveSlowTs)} based on your slowest platform trip</div>
+    ${scheduleLabel?`<div class="suggest-sub" style="margin-top:4px;">Learned train departures: ${scheduleLabel}</div>`:''}
   </div>`;
 
-  const rows = [
-    { label: 'Start → Train departure', s: preTrain },
-    { label: 'Train departure → Destination', s: postTrain },
-  ];
+  const rows = [{ label: 'Left home → Arrived at station', s: toPlatform }];
+  if (platformToDeparture) rows.push({ label: 'Arrived at station → Train departure', s: platformToDeparture });
+  renderTrainBreakdown(rows, segsEl);
+}
+
+function renderEveningTrainPlan(tripsOf, boardTs, buffer, resultEl, segsEl) {
+  const trainTrips = tripsOf.filter(t => hasCheckpoint(t, 'Boarded train'));
+  const toBoarding = namedSegStats(trainTrips, firstCheckpointName, 'Boarded train');
+  const boardingToDeparture = namedSegStats(trainTrips, 'Boarded train', 'Train departure');
+  if (!toBoarding) {
+    resultEl.innerHTML = `<div class="suggest-result"><div style="font-size:14px;color:var(--text2);">No evening boarding data yet. Log Boarded train so the planner can work backward to when you should leave work.</div></div>`;
+    segsEl.innerHTML = ''; return;
+  }
+
+  const boardTargetTs = boardTs.getTime() - buffer * 60000;
+  const leaveTs = boardTargetTs - toBoarding.med;
+  const leaveSlowTs = boardTargetTs - toBoarding.max;
+  const boardSchedule = getObservedCheckpointSchedule(trainTrips, 'Boarded train');
+  const scheduleLabel = boardSchedule.length ? boardSchedule.map(formatMinutes).join(', ') : '';
+
+  resultEl.innerHTML = `<div class="suggest-result">
+    <div class="suggest-leave">Leave work by ${fmtTime(leaveTs)}</div>
+    <div class="suggest-sub">To board by ${fmtTime(boardTs)}, aim to reach the train by ${fmtTime(boardTargetTs)}${buffer?` (${buffer}min buffer)`:''}</div>
+    <div class="suggest-sub" style="margin-top:4px;">Worst case: leave by ${fmtTime(leaveSlowTs)} based on your slowest office-to-boarding trip</div>
+    ${scheduleLabel?`<div class="suggest-sub" style="margin-top:4px;">Learned boarding times: ${scheduleLabel}</div>`:''}
+  </div>`;
+
+  const rows = [{ label: 'Left office → Boarded train', s: toBoarding }];
+  if (boardingToDeparture) rows.push({ label: 'Boarded train → Train departure', s: boardingToDeparture });
+  renderTrainBreakdown(rows, segsEl);
+}
+
+function renderTrainBreakdown(rows, segsEl) {
   const maxMed = Math.max(...rows.map(r => r.s.med));
   let html='<div class="insight-card"><div style="font-size:13px;font-weight:600;margin-bottom:10px;">Train-aware breakdown</div>';
   rows.forEach(({label,s})=>{
@@ -943,8 +976,12 @@ function durationStats(durations) {
 }
 
 function getObservedTrainSchedule(tripList) {
+  return getObservedCheckpointSchedule(tripList, 'Train departure');
+}
+
+function getObservedCheckpointSchedule(tripList, checkpointName) {
   const mins = tripList.flatMap(trip => {
-    const cp = trip.checkpoints.find(c => c.name === 'Train departure' && c.time != null);
+    const cp = trip.checkpoints.find(c => c.name === checkpointName && c.time != null);
     if (!cp) return [];
     const d = new Date(cp.time);
     return [d.getHours() * 60 + d.getMinutes()];
