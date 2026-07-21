@@ -468,6 +468,14 @@ function normalizeLegacyTrip(trip) {
     normalized.variantKey = normalized.variantKey || 'transit';
     changed = true;
   });
+  if (normalized.type === 'commute-am'
+    && hasCheckpointName(normalized, 'Train departure')
+    && !hasCheckpointName(normalized, 'Arrived at station')) {
+    const departIdx = normalized.checkpoints.findIndex(c => c.name === 'Train departure');
+    normalized.checkpoints.splice(departIdx, 0, { name:'Arrived at station', time:null, skipped:false });
+    normalized.variantKey = normalized.variantKey || 'transit';
+    changed = true;
+  }
   return changed ? normalized : trip;
 }
 function hasCheckpointName(trip, name) {
