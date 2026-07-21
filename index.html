@@ -392,7 +392,7 @@ const BUILTIN = {
   'commute-am': {
     name:'Morning commute', icon:'\u{1F305}', group:'commute',
     variants: {
-      transit: { label:'Train', cps:['Left home','Boarded train','Train departure','Train arrived at GCT','Arrived at office'] },
+      transit: { label:'Train', cps:['Left home','Arrived at station','Train departure','Train arrived at GCT','Arrived at office'] },
       drive:   { label:'Car',   cps:['Left home','Called Uber','Uber/car arrived','Arrived at office'] },
     },
     defaultVariant: 'transit',
@@ -448,7 +448,7 @@ function normalizeLegacyTrip(trip) {
   if (!trip || !Array.isArray(trip.checkpoints)) return trip;
   const normalized = { ...trip, checkpoints: trip.checkpoints.map(c => ({ ...c })) };
   const legacyPairs = {
-    'commute-am': [['Arrived at station', 'Boarded train']],
+    'commute-am': [['Boarded train', 'Train departure']],
     'commute-pm': [['Arrived at GCT', 'Boarded train']],
   };
   let changed = false;
@@ -469,6 +469,20 @@ function normalizeLegacyTrip(trip) {
     changed = true;
   });
   return changed ? normalized : trip;
+}
+function hasCheckpointName(trip, name) {
+  return trip && Array.isArray(trip.checkpoints) && trip.checkpoints.some(c => c.name === name);
+}
+function shouldRepairTripFromImport(existing, incoming) {
+  return incoming && incoming.type === 'commute-am'
+    && hasCheckpointName(incoming, 'Arrived at station')
+    && !hasCheckpointName(existing, 'Arrived at station');
+}
+function mergeReimportedTrip(existing, incoming) {
+  return {
+    ...incoming,
+    comment: existing && existing.comment ? existing.comment : incoming.comment,
+  };
 }
 function hydrate() {
   try { trips = JSON.parse(localStorage.getItem('ct-trips-v2') || '[]'); } catch(e) { trips=[]; }
@@ -1500,15 +1514,32 @@ function importData(e) {
       if(Array.isArray(data)){incoming=data;}
       else if(data.trips){incoming=data.trips||[];incomingRoutes=data.customRoutes||{};}
       else{showBanner('Unrecognized file format.',false);return;}
-      const existIds=new Set(trips.map(t=>t.id));
-      const newTrips=incoming.filter(t=>t.id&&t.type&&t.checkpoints&&!existIds.has(t.id)).map(normalizeLegacyTrip);
-      const dupes=incoming.length-newTrips.length;
+      const existingById=new Map(trips.map((t,i)=>[t.id,i]));
+      const newTrips=[];
+      let dupes=0,repairedTrips=0;
+      incoming.forEach(t=>{
+        if(!t.id||!t.type||!t.checkpoints){dupes++;return;}
+        const normalized=normalizeLegacyTrip(t);
+        const existingIdx=existingById.get(t.id);
+        if(existingIdx===undefined){
+          newTrips.push(normalized);
+          existingById.set(t.id,-1);
+          return;
+        }
+        if(existingIdx>=0&&shouldRepairTripFromImport(trips[existingIdx],normalized)){
+          trips[existingIdx]=mergeReimportedTrip(trips[existingIdx],normalized);
+          repairedTrips++;
+        }else{
+          dupes++;
+        }
+      });
       const existRouteIds=new Set(Object.keys(customRoutes));
       let newRoutes=0;
       Object.entries(incomingRoutes).forEach(([id,r])=>{if(!existRouteIds.has(id)){customRoutes[id]=r;newRoutes++;}});
       trips=[...trips,...newTrips].sort((a,b)=>b.startedAt-a.startedAt);
       persist(); renderHistory(); renderTripGrid();
       let msg=`Imported ${newTrips.length} trip${newTrips.length!==1?'s':''}.`;
+      if(repairedTrips>0) msg+=` Repaired ${repairedTrips} existing morning trip${repairedTrips!==1?'s':''}.`;
       if(dupes>0) msg+=` ${dupes} duplicate${dupes>1?'s':''} skipped.`;
       if(newRoutes>0) msg+=` ${newRoutes} custom route${newRoutes>1?'s':''} added.`;
       showBanner(msg,true);
