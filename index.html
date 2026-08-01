@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Commute Tracker</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -27,8 +27,16 @@
       --arrive-bg: #042C53; --arrive-text: #85B7EB; --arrive-border: #185FA5;
     }
   }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg3); color: var(--text); min-height: 100vh; }
-  .container { max-width: 640px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg3); color: var(--text); min-height: 100vh; min-height: 100dvh; }
+  .container {
+    max-width: 640px;
+    margin: 0 auto;
+    padding:
+      max(1.5rem, calc(env(safe-area-inset-top, 0px) + 1rem))
+      max(1rem, calc(env(safe-area-inset-right, 0px) + 1rem))
+      max(4rem, calc(env(safe-area-inset-bottom, 0px) + 4rem))
+      max(1rem, calc(env(safe-area-inset-left, 0px) + 1rem));
+  }
   h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
   .subtitle { font-size: 14px; color: var(--text2); margin-bottom: 1.5rem; }
   .tabs { display: flex; gap: 4px; background: var(--bg2); border-radius: var(--r); padding: 4px; margin-bottom: 1.25rem; }
@@ -143,6 +151,7 @@
   .filter-chip:hover { border-color: var(--text2); color: var(--text); }
   .filter-chip.active { background: var(--text); color: var(--bg); border-color: var(--text); }
   .hist-comment { font-size: 12px; color: var(--text2); font-style: italic; margin-top: 2px; }
+  .hist-note-text { white-space: pre-wrap; }
   .hist-comment-area { width: 100%; font-size: 13px; padding: 7px 10px; border-radius: var(--r); border: 1px solid var(--border2); background: var(--bg); color: var(--text); resize: none; font-family: inherit; line-height: 1.4; }
   .hist-comment-area:focus { outline: none; border-color: var(--text2); }
   .empty { text-align: center; padding: 3rem 1rem; color: var(--text2); font-size: 14px; line-height: 1.7; }
@@ -476,7 +485,30 @@ function normalizeLegacyTrip(trip) {
     normalized.variantKey = normalized.variantKey || 'transit';
     changed = true;
   }
+  const timelineNormalized = normalizeCheckpointTimeline(normalized);
+  if (timelineNormalized !== normalized) return timelineNormalized;
   return changed ? normalized : trip;
+}
+function normalizeCheckpointTimeline(trip) {
+  if (!trip || !Array.isArray(trip.checkpoints)) return trip;
+  let changed = false;
+  let lastTime = null;
+  const dayMs = 24 * 60 * 60 * 1000;
+  const checkpoints = trip.checkpoints.map(cp => {
+    if (cp.time == null) return { ...cp };
+    let time = Number(cp.time);
+    if (!Number.isFinite(time)) {
+      changed = true;
+      return { ...cp, time: null };
+    }
+    while (lastTime != null && time < lastTime) {
+      time += dayMs;
+      changed = true;
+    }
+    lastTime = time;
+    return time === cp.time ? { ...cp } : { ...cp, time };
+  });
+  return changed ? { ...trip, checkpoints } : trip;
 }
 function hasCheckpointName(trip, name) {
   return trip && Array.isArray(trip.checkpoints) && trip.checkpoints.some(c => c.name === name);
@@ -1231,7 +1263,7 @@ function buildHistItem(trip, td) {
   // Summary row
   const row = document.createElement('div');
   row.className = 'hist-row';
-  const commentSnippet = trip.comment ? `<div class="hist-comment">${escHtml(trip.comment)}</div>` : '';
+  const commentSnippet = trip.comment ? `<div class="hist-comment hist-note-text">${escHtml(trip.comment)}</div>` : '';
   row.innerHTML = `
     <span class="hist-chevron">▶</span>
     <div class="hist-icon">${td.icon}</div>
@@ -1267,7 +1299,7 @@ function buildDetailContent(trip, editing) {
       const timeStr = cp.skipped ? 'skipped' : (cp.time ? fmtTime(cp.time) : '—');
       cpRow.innerHTML = `<span class="${nameClass}">${cp.name}</span><span class="hist-cp-time">${timeStr}</span>`;
       frag.appendChild(cpRow);
-      if (i < trip.checkpoints.length-1 && cp.time!=null && trip.checkpoints[i+1].time!=null) {
+      if (i < trip.checkpoints.length-1 && cp.time!=null && trip.checkpoints[i+1].time!=null && trip.checkpoints[i+1].time >= cp.time) {
         const gap = document.createElement('div');
         gap.className = 'hist-cp-gap';
         gap.textContent = fmtDur(trip.checkpoints[i+1].time - cp.time);
@@ -1293,7 +1325,7 @@ function buildDetailContent(trip, editing) {
     if (trip.comment) {
       const commentDiv = document.createElement('div');
       commentDiv.style.cssText = 'padding:8px 16px 10px;border-top:0.5px solid var(--border);';
-      commentDiv.innerHTML = `<div style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Note</div><div style="font-size:13px;color:var(--text2);line-height:1.5;">${escHtml(trip.comment)}</div>`;
+      commentDiv.innerHTML = `<div style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--text3);margin-bottom:4px;">Note</div><div class="hist-note-text" style="font-size:13px;color:var(--text2);line-height:1.5;">${escHtml(trip.comment)}</div>`;
       frag.appendChild(commentDiv);
     }
   } else {
@@ -1374,6 +1406,10 @@ function saveInlineEdit(id) {
     }
   });
   if (!valid) return;
+  const normalizedTrip = normalizeCheckpointTimeline(trip);
+  if (normalizedTrip !== trip) {
+    trip.checkpoints = normalizedTrip.checkpoints;
+  }
   // Save comment
   const commentEl = item.querySelector('#comment-' + id);
   if (commentEl) {
@@ -1607,10 +1643,10 @@ function escHtml(s) {
 }
 function fmtTime(ts){return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
 function fmtDate(ts){return new Date(ts).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric',year:'numeric'});}
-function fmtDur(ms){const m=Math.round(ms/60000);return m<60?m+'m':Math.floor(m/60)+'h '+(m%60)+'m';}
+function fmtDur(ms){const m=Math.max(0,Math.round(ms/60000));return m<60?m+'m':Math.floor(m/60)+'h '+(m%60)+'m';}
 function getTripDur(trip){const t=trip.checkpoints.filter(c=>c.time!=null).map(c=>c.time);if(t.length<2)return null;return Math.max(...t)-Math.min(...t);}
 function segStats(tripList,from,to){
-  const d=tripList.flatMap(tr=>{const cps=tr.checkpoints;return(cps.length>to&&cps[from]&&cps[to]&&cps[from].time&&cps[to].time)?[cps[to].time-cps[from].time]:[];}).sort((a,b)=>a-b);
+  const d=tripList.flatMap(tr=>{const cps=tr.checkpoints;return(cps.length>to&&cps[from]&&cps[to]&&cps[from].time&&cps[to].time&&cps[to].time>=cps[from].time)?[cps[to].time-cps[from].time]:[];}).sort((a,b)=>a-b);
   if(!d.length)return null;
   return{med:d[Math.floor(d.length/2)],min:d[0],max:d[d.length-1],n:d.length};
 }
