@@ -97,6 +97,11 @@
   .cp-dot.next { border-color: var(--text2); }
   .cp-label { flex: 1; font-size: 14px; }
   .cp-time { font-size: 13px; color: var(--text2); font-variant-numeric: tabular-nums; min-width: 52px; text-align: right; }
+  .cp-time-edit { font: inherit; color: inherit; background: none; border: none; border-bottom: 1px dashed var(--border2); cursor: pointer; padding: 2px 0; white-space: nowrap; }
+  .cp-time-edit.empty { color: var(--text3); font-size: 11px; }
+  .active-cp-editor { display: flex; align-items: center; gap: 6px; padding: 4px 16px 10px 38px; flex-wrap: wrap; }
+  .active-cp-date { width: 138px; }
+  .active-cp-time { width: 102px; }
   .cp-btn { font-size: 12px; font-weight: 500; padding: 5px 14px; border-radius: var(--r); border: 1px solid var(--border2); background: var(--bg2); cursor: pointer; color: var(--text); white-space: nowrap; }
   .cp-btn:hover { background: var(--bg3); }
   .cp-btn:disabled { opacity: 0.35; cursor: default; }
@@ -115,6 +120,14 @@
   .btn-danger { background: transparent; color: #c0392b; border: 1px solid rgba(192,57,43,0.3); }
   .btn-danger:hover { background: rgba(192,57,43,0.06); }
   .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+  /* Active trip focus */
+  .active-action { background: var(--blue-bg); border-radius: var(--r-lg); padding: 16px; margin-bottom: 12px; }
+  .active-action-label { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; color: var(--blue); text-transform: uppercase; margin-bottom: 6px; }
+  .active-action-title { font-size: 17px; font-weight: 650; margin-bottom: 4px; }
+  .active-action-meta { font-size: 12px; color: var(--text2); line-height: 1.5; margin-bottom: 12px; }
+  .active-next-btn { width: 100%; min-height: 46px; font-size: 15px; }
+  .active-saved { font-size: 11px; color: var(--text3); margin-top: 8px; text-align: center; }
 
   /* Plan tab */
   .suggest-box { background: var(--blue-bg); border-radius: var(--r-lg); padding: 16px; margin-bottom: 1rem; }
@@ -215,6 +228,7 @@
   .hist-detail-footer { display: flex; gap: 8px; padding: 10px 16px; border-top: 0.5px solid var(--border); }
   /* Edit mode inside expanded row */
   .hist-cp-input { font-size: 13px; padding: 5px 8px; border-radius: var(--r); border: 1px solid var(--border2); background: var(--bg); color: var(--text); width: 106px; flex-shrink: 0; }
+  .hist-date-input { width: 142px; }
 </style>
 </head>
 <body>
@@ -262,6 +276,7 @@
     </div>
 
     <div id="step-log" style="display:none;">
+      <div id="active-action"></div>
       <div class="card">
         <div class="card-header">
           <div class="card-header-icon" id="log-icon"></div>
@@ -274,7 +289,7 @@
         <div class="cp-list" id="cp-list"></div>
       </div>
       <div class="btn-row">
-        <button class="btn btn-primary" id="save-btn" onclick="saveTrip()" disabled style="flex:1;">Save trip</button>
+        <button class="btn btn-primary" id="save-btn" onclick="saveTrip()" disabled style="flex:1;">Finish trip</button>
         <button class="btn btn-danger" onclick="discardTrip()">Discard</button>
       </div>
     </div>
@@ -414,9 +429,9 @@ const BUILTIN = {
     },
     defaultVariant: 'transit',
   },
-  'flight-lga-dep': { name:'LGA · Departure', icon:'\u2708\uFE0F', group:'flight', dir:'dep', airport:'LGA', cps:['Left home','Called Uber','Uber/car arrived','Arrived at LGA','Through security','At gate'], skippable:new Set([1]) },
-  'flight-jfk-dep': { name:'JFK · Departure', icon:'\u2708\uFE0F', group:'flight', dir:'dep', airport:'JFK', cps:['Left home','Called Uber','Uber/car arrived','Arrived at JFK','Through security','At gate'], skippable:new Set([1]) },
-  'flight-hpn-dep': { name:'HPN · Departure', icon:'\u2708\uFE0F', group:'flight', dir:'dep', airport:'HPN', cps:['Left home','Called Uber','Uber/car arrived','Arrived at HPN','Through security','At gate'], skippable:new Set([1]) },
+  'flight-lga-dep': { name:'LGA · Departure', icon:'\u2708\uFE0F', group:'flight', dir:'dep', airport:'LGA', cps:['Left home','Called Uber','Uber/car arrived','Arrived at LGA','Through security','Boarding','Departure'], skippable:new Set([1]) },
+  'flight-jfk-dep': { name:'JFK · Departure', icon:'\u2708\uFE0F', group:'flight', dir:'dep', airport:'JFK', cps:['Left home','Called Uber','Uber/car arrived','Arrived at JFK','Through security','Boarding','Departure'], skippable:new Set([1]) },
+  'flight-hpn-dep': { name:'HPN · Departure', icon:'\u2708\uFE0F', group:'flight', dir:'dep', airport:'HPN', cps:['Left home','Called Uber','Uber/car arrived','Arrived at HPN','Through security','Boarding','Departure'], skippable:new Set([1]) },
   'flight-lga-arr': { name:'LGA · Arrival', icon:'\u{1F6EC}', group:'flight', dir:'arr', airport:'LGA', cps:['Landed at LGA','Deplaned','Arrived at baggage claim','Baggage claimed','Called Uber','Uber/car arrived','Arrived home'], skippable:new Set([2,3,4]) },
   'flight-jfk-arr': { name:'JFK · Arrival', icon:'\u{1F6EC}', group:'flight', dir:'arr', airport:'JFK', cps:['Landed at JFK','Deplaned','Arrived at baggage claim','Baggage claimed','Called Uber','Uber/car arrived','Arrived home'], skippable:new Set([2,3,4]) },
   'flight-hpn-arr': { name:'HPN · Arrival', icon:'\u{1F6EC}', group:'flight', dir:'arr', airport:'HPN', cps:['Landed at HPN','Deplaned','Arrived at baggage claim','Baggage claimed','Called Uber','Uber/car arrived','Arrived home'], skippable:new Set([2,3,4]) },
@@ -440,6 +455,8 @@ let activeTrip = null;
 let selectedType = null;
 let deleteId = null;
 let editMode = false;
+let activeCheckpointEdit = null;
+let activeTripRecovered = false;
 
 function allTypes() { return { ...BUILTIN, ...customRoutes }; }
 function getType(id) { return allTypes()[id]; }
@@ -453,14 +470,103 @@ function persistActiveTrip() {
   if (activeTrip) localStorage.setItem('ct-active-trip-v2', JSON.stringify(activeTrip));
   else localStorage.removeItem('ct-active-trip-v2');
 }
+function syncActiveTrip() {
+  if (!activeTrip) return;
+  activeTrip.inProgress = true;
+  activeTrip.updatedAt = localDateTimeNow();
+  const existingIdx = trips.findIndex(t => t.id === activeTrip.id);
+  if (existingIdx === -1) trips.unshift(activeTrip);
+  else trips[existingIdx] = activeTrip;
+  persist();
+  persistActiveTrip();
+}
+function padDatePart(value, length = 2) {
+  return String(value).padStart(length, '0');
+}
+function localDateTimeFromDate(date) {
+  return `${date.getFullYear()}-${padDatePart(date.getMonth()+1)}-${padDatePart(date.getDate())}`
+    + `T${padDatePart(date.getHours())}:${padDatePart(date.getMinutes())}:${padDatePart(date.getSeconds())}.${padDatePart(date.getMilliseconds(), 3)}`;
+}
+function localDateTimeNow() {
+  return localDateTimeFromDate(new Date());
+}
+function isLocalDateTime(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(value);
+}
+function localDateTimeParts(value) {
+  if (!isLocalDateTime(value)) return null;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/);
+  return {
+    year: Number(match[1]), month: Number(match[2]), day: Number(match[3]),
+    hour: Number(match[4]), minute: Number(match[5]), second: Number(match[6] || 0),
+    millisecond: Number((match[7] || '').padEnd(3, '0') || 0),
+  };
+}
+function localDateTimeValue(value) {
+  const parts = localDateTimeParts(value);
+  if (parts) return Date.UTC(parts.year, parts.month-1, parts.day, parts.hour, parts.minute, parts.second, parts.millisecond);
+  const numeric = value instanceof Date ? value.getTime() : Number(value);
+  return Number.isFinite(numeric) ? numeric : NaN;
+}
+function localDateTimeFromValue(value) {
+  if (isLocalDateTime(value)) return value;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : localDateTimeFromDate(date);
+}
+function localDateTimeFromFloatingValue(value) {
+  const date = new Date(value);
+  return `${date.getUTCFullYear()}-${padDatePart(date.getUTCMonth()+1)}-${padDatePart(date.getUTCDate())}`
+    + `T${padDatePart(date.getUTCHours())}:${padDatePart(date.getUTCMinutes())}:${padDatePart(date.getUTCSeconds())}.${padDatePart(date.getUTCMilliseconds(), 3)}`;
+}
+function localCalendarParts(value) {
+  const parts = localDateTimeParts(value);
+  if (parts) {
+    const weekday = new Date(Date.UTC(parts.year, parts.month-1, parts.day)).getUTCDay();
+    return { ...parts, weekday };
+  }
+  const date = new Date(value);
+  return {
+    year: date.getFullYear(), month: date.getMonth()+1, day: date.getDate(),
+    hour: date.getHours(), minute: date.getMinutes(), second: date.getSeconds(),
+    millisecond: date.getMilliseconds(), weekday: date.getDay(),
+  };
+}
+function normalizeStoredTripTimes(trip) {
+  if (!trip || !Array.isArray(trip.checkpoints)) return trip;
+  let changed = false;
+  const normalize = value => {
+    if (value == null || isLocalDateTime(value)) return value;
+    const localValue = localDateTimeFromValue(value);
+    if (localValue == null) return value;
+    changed = true;
+    return localValue;
+  };
+  const startedAt = normalize(trip.startedAt);
+  const checkpoints = trip.checkpoints.map(cp => ({ ...cp, time: normalize(cp.time) }));
+  return changed ? { ...trip, startedAt, checkpoints } : trip;
+}
+function normalizeCustomFlightRoutes(routes) {
+  let changed = false;
+  const normalized = {};
+  Object.entries(routes || {}).forEach(([id, route]) => {
+    if (route && route.group === 'custom-flight' && route.dir === 'dep' && Array.isArray(route.cps) && route.cps.includes('At gate')) {
+      normalized[id] = { ...route, cps: route.cps.flatMap(cp => cp === 'At gate' ? ['Boarding','Departure'] : [cp]) };
+      changed = true;
+    } else {
+      normalized[id] = route;
+    }
+  });
+  return changed ? normalized : routes;
+}
 function normalizeLegacyTrip(trip) {
   if (!trip || !Array.isArray(trip.checkpoints)) return trip;
-  const normalized = { ...trip, checkpoints: trip.checkpoints.map(c => ({ ...c })) };
+  const storedTrip = normalizeStoredTripTimes(trip);
+  const normalized = { ...storedTrip, checkpoints: storedTrip.checkpoints.map(c => ({ ...c })) };
   const legacyPairs = {
     'commute-am': [['Boarded train', 'Train departure']],
     'commute-pm': [['Arrived at GCT', 'Boarded train']],
   };
-  let changed = false;
+  let changed = storedTrip !== trip;
   (legacyPairs[normalized.type] || []).forEach(([dropName, keepName]) => {
     const dropIdx = normalized.checkpoints.findIndex(c => c.name === dropName);
     const keepIdx = normalized.checkpoints.findIndex(c => c.name === keepName);
@@ -485,6 +591,14 @@ function normalizeLegacyTrip(trip) {
     normalized.variantKey = normalized.variantKey || 'transit';
     changed = true;
   }
+  const gateIdx = normalized.checkpoints.findIndex(c => c.name === 'At gate');
+  if (gateIdx !== -1) {
+    normalized.checkpoints[gateIdx].name = 'Boarding';
+    if (!hasCheckpointName(normalized, 'Departure')) {
+      normalized.checkpoints.splice(gateIdx + 1, 0, { name:'Departure', time:null, skipped:false });
+    }
+    changed = true;
+  }
   const timelineNormalized = normalizeCheckpointTimeline(normalized);
   if (timelineNormalized !== normalized) return timelineNormalized;
   return changed ? normalized : trip;
@@ -493,20 +607,20 @@ function normalizeCheckpointTimeline(trip) {
   if (!trip || !Array.isArray(trip.checkpoints)) return trip;
   let changed = false;
   let lastTime = null;
-  const dayMs = 24 * 60 * 60 * 1000;
   const checkpoints = trip.checkpoints.map(cp => {
     if (cp.time == null) return { ...cp };
-    let time = Number(cp.time);
+    let time = localDateTimeValue(cp.time);
     if (!Number.isFinite(time)) {
       changed = true;
       return { ...cp, time: null };
     }
     while (lastTime != null && time < lastTime) {
-      time += dayMs;
+      time += 24 * 60 * 60 * 1000;
       changed = true;
     }
     lastTime = time;
-    return time === cp.time ? { ...cp } : { ...cp, time };
+    const normalizedTime = localDateTimeFromFloatingValue(time);
+    return normalizedTime === cp.time ? { ...cp } : { ...cp, time: normalizedTime };
   });
   return changed ? { ...trip, checkpoints } : trip;
 }
@@ -528,15 +642,28 @@ function hydrate() {
   try { trips = JSON.parse(localStorage.getItem('ct-trips-v2') || '[]'); } catch(e) { trips=[]; }
   try { customRoutes = JSON.parse(localStorage.getItem('ct-routes-v2') || '{}'); } catch(e) { customRoutes={}; }
   try { activeTrip = JSON.parse(localStorage.getItem('ct-active-trip-v2') || 'null'); } catch(e) { activeTrip=null; }
+  const normalizedRoutes = normalizeCustomFlightRoutes(customRoutes);
   const normalizedTrips = trips.map(normalizeLegacyTrip);
-  if (JSON.stringify(normalizedTrips) !== JSON.stringify(trips)) {
+  if (normalizedRoutes !== customRoutes || JSON.stringify(normalizedTrips) !== JSON.stringify(trips)) {
+    customRoutes = normalizedRoutes;
     trips = normalizedTrips;
     persist();
   }
   if (activeTrip) {
-    const previousActiveTrip = JSON.stringify(activeTrip);
+    activeTripRecovered = true;
     activeTrip = normalizeLegacyTrip(activeTrip);
-    if (JSON.stringify(activeTrip) !== previousActiveTrip) persistActiveTrip();
+    activeTrip.inProgress = true;
+    const activeIdx = trips.findIndex(t => t.id === activeTrip.id);
+    if (activeIdx === -1) trips.unshift(activeTrip);
+    else trips[activeIdx] = activeTrip;
+    persist();
+    persistActiveTrip();
+  } else {
+    activeTrip = trips.find(t => t.inProgress) || null;
+    if (activeTrip) {
+      activeTripRecovered = true;
+      persistActiveTrip();
+    }
   }
   if (activeTrip && activeTrip.type) selectedType = activeTrip.type;
 }
@@ -693,8 +820,10 @@ function startTrip() {
   const cps = getCps(selectedType);
   // store which variant was used so history can display it correctly
   const variantKey = td.variants ? (commuteVariants[selectedType] || td.defaultVariant) : null;
-  activeTrip = { id: Date.now(), type: selectedType, variantKey, startedAt: Date.now(), checkpoints: cps.map(n=>({name:n,time:null,skipped:false})) };
-  persistActiveTrip();
+  activeTrip = { id: Date.now(), type: selectedType, variantKey, startedAt: localDateTimeNow(), inProgress:true, checkpoints: cps.map(n=>({name:n,time:null,skipped:false})) };
+  activeCheckpointEdit = null;
+  activeTripRecovered = false;
+  syncActiveTrip();
   showActiveTrip();
 }
 
@@ -764,23 +893,103 @@ function renderActiveCPs() {
     }
 
     const dotClass = logged ? 'logged' : (available && !superseded ? 'next' : '');
+    const timeButton = `<button class="cp-time-edit${logged?'':' empty'}" onclick="openActiveTimeEditor(${i})">${logged?fmtTime(cp.time):'Set time'}</button>`;
     row.innerHTML = `
       <div class="cp-dot ${dotClass}"></div>
       <div class="cp-label" style="${skipped?'color:var(--text3);text-decoration:line-through;':''}">${cp.name}</div>
-      <div class="cp-time">${logged?fmtTime(cp.time):''}</div>
+      <div class="cp-time">${timeButton}</div>
       ${leftBtn}${rightBtn}
     `;
     list.appendChild(row);
+    if (activeCheckpointEdit === i) {
+      const editorValue = cp.time || localDateTimeNow();
+      const editor = document.createElement('div');
+      editor.className = 'active-cp-editor';
+      editor.innerHTML = `
+        <input class="hist-cp-input active-cp-date" id="active-cp-date-${i}" type="date" value="${localDateString(editorValue)}" aria-label="Checkpoint date">
+        <input class="hist-cp-input active-cp-time" id="active-cp-time-${i}" type="time" value="${localTimeInputValue(editorValue)}" aria-label="Checkpoint time">
+        <button class="btn btn-primary btn-sm" onclick="applyActiveCPTime(${i})">Apply</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeActiveTimeEditor()">Cancel</button>
+      `;
+      list.appendChild(editor);
+    }
   });
   document.getElementById('log-started').textContent = 'Started ' + fmtTime(activeTrip.startedAt);
   document.getElementById('save-btn').disabled = !cps.some(c=>c.time!=null||c.skipped);
+  renderActiveAction();
+}
+
+function autosaveStatus(value) {
+  if (!value) return 'Saved automatically';
+  const ageMs = localDateTimeValue(localDateTimeNow()) - localDateTimeValue(value);
+  if (ageMs >= 0 && ageMs < 60000) return 'Saved just now';
+  if (ageMs >= 0 && ageMs < 60 * 60000) return `Saved ${Math.floor(ageMs / 60000)}m ago`;
+  return 'Saved at ' + fmtTime(value);
+}
+
+function renderActiveAction() {
+  const el = document.getElementById('active-action');
+  if (!el || !activeTrip) return;
+  const cps = activeTrip.checkpoints;
+  const nextIdx = cps.findIndex(cp => cp.time == null && !cp.skipped);
+  const lastLogged = [...cps].reverse().find(cp => cp.time != null);
+  const elapsed = Math.max(0, localDateTimeValue(localDateTimeNow()) - localDateTimeValue(activeTrip.startedAt));
+  const label = activeTripRecovered ? 'Resume trip' : 'Next checkpoint';
+  const lastText = lastLogged ? `Last: ${escHtml(lastLogged.name)} at ${fmtTime(lastLogged.time)}` : 'No checkpoints logged yet';
+  if (nextIdx === -1) {
+    el.innerHTML = `
+      <div class="active-action">
+        <div class="active-action-label">${label}</div>
+        <div class="active-action-title">All checkpoints complete</div>
+        <div class="active-action-meta">${lastText} · ${fmtDur(elapsed)} elapsed</div>
+        <button class="btn btn-primary active-next-btn" onclick="saveTrip()">Finish trip</button>
+        <div class="active-saved">${autosaveStatus(activeTrip.updatedAt)}</div>
+      </div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="active-action">
+      <div class="active-action-label">${label}</div>
+      <div class="active-action-title">${escHtml(cps[nextIdx].name)}</div>
+      <div class="active-action-meta">${lastText} · ${fmtDur(elapsed)} elapsed</div>
+      <button class="btn btn-primary active-next-btn" onclick="logCP(${nextIdx})">Log ${escHtml(cps[nextIdx].name)} now</button>
+      <div class="active-saved">${autosaveStatus(activeTrip.updatedAt)}</div>
+    </div>`;
 }
 
 function logCP(i) {
   const cps = activeTrip.checkpoints;
-  cps[i].time = Date.now();
+  cps[i].time = localDateTimeNow();
   cps[i].skipped = false;
-  persistActiveTrip();
+  activeCheckpointEdit = null;
+  activeTripRecovered = false;
+  syncActiveTrip();
+  renderActiveCPs();
+}
+
+function openActiveTimeEditor(i) {
+  activeCheckpointEdit = i;
+  renderActiveCPs();
+}
+
+function closeActiveTimeEditor() {
+  activeCheckpointEdit = null;
+  renderActiveCPs();
+}
+
+function applyActiveCPTime(i) {
+  const dateInput = document.getElementById('active-cp-date-' + i);
+  const timeInput = document.getElementById('active-cp-time-' + i);
+  if (!dateInput || !timeInput || !dateInput.value || !timeInput.value) return;
+  const localTime = `${dateInput.value}T${timeInput.value}:00.000`;
+  if (!isLocalDateTime(localTime)) return;
+  const hadOtherTimes = activeTrip.checkpoints.some((cp, idx) => idx !== i && cp.time != null);
+  activeTrip.checkpoints[i].time = localTime;
+  activeTrip.checkpoints[i].skipped = false;
+  if (!hadOtherTimes) activeTrip.startedAt = localTime;
+  activeCheckpointEdit = null;
+  activeTripRecovered = false;
+  syncActiveTrip();
   renderActiveCPs();
 }
 
@@ -788,7 +997,9 @@ function skipCP(i) {
   const cps = activeTrip.checkpoints;
   cps[i].time = null;
   cps[i].skipped = true;
-  persistActiveTrip();
+  activeCheckpointEdit = null;
+  activeTripRecovered = false;
+  syncActiveTrip();
   renderActiveCPs();
 }
 
@@ -796,17 +1007,34 @@ function undoCP(i) {
   const cps = activeTrip.checkpoints;
   cps[i].time = null;
   cps[i].skipped = false;
-  persistActiveTrip();
+  activeCheckpointEdit = null;
+  activeTripRecovered = false;
+  syncActiveTrip();
   renderActiveCPs();
 }
 
 function saveTrip() {
-  trips.unshift({...activeTrip, checkpoints: activeTrip.checkpoints.map(c=>({...c}))});
-  persist(); discardTrip(); switchTab('history');
+  const completed = { ...activeTrip, inProgress:false, checkpoints: activeTrip.checkpoints.map(c=>({...c})) };
+  const existingIdx = trips.findIndex(t => t.id === completed.id);
+  if (existingIdx === -1) trips.unshift(completed);
+  else trips[existingIdx] = completed;
+  activeTrip = null;
+  selectedType = null;
+  activeCheckpointEdit = null;
+  activeTripRecovered = false;
+  persist();
+  persistActiveTrip();
+  document.getElementById('step-choose').style.display = 'block';
+  document.getElementById('step-log').style.display = 'none';
+  switchTab('history');
 }
 
 function discardTrip() {
+  if (activeTrip) trips = trips.filter(t => t.id !== activeTrip.id);
   activeTrip = null; selectedType = null;
+  activeCheckpointEdit = null;
+  activeTripRecovered = false;
+  persist();
   persistActiveTrip();
   document.getElementById('step-choose').style.display = 'block';
   document.getElementById('step-log').style.display = 'none';
@@ -875,7 +1103,7 @@ function renderPlan() {
   const segsEl = document.getElementById('plan-segments');
   if (!typeId || !arriveStr) { resultEl.innerHTML=''; segsEl.innerHTML=''; return; }
   const td = getType(typeId); if (!td) return;
-  const tripsOf = trips.filter(t=>t.type===typeId);
+  const tripsOf = trips.filter(t=>!t.inProgress && t.type===typeId);
   const planCps = getCps(typeId);
   const [h,m] = arriveStr.split(':').map(Number);
   const arriveTs = new Date(); arriveTs.setHours(h,m,0,0);
@@ -1004,7 +1232,7 @@ function namedSegStats(tripList, fromNameOrFn, toNameOrFn) {
     const toName = typeof toNameOrFn === 'function' ? toNameOrFn(trip) : toNameOrFn;
     const from = trip.checkpoints.find(c => c.name === fromName);
     const to = trip.checkpoints.find(c => c.name === toName);
-    return from && to && from.time && to.time ? [to.time - from.time] : [];
+    return from && to && from.time && to.time ? [localDateTimeValue(to.time) - localDateTimeValue(from.time)] : [];
   });
   return durationStats(durations);
 }
@@ -1023,8 +1251,8 @@ function getObservedCheckpointSchedule(tripList, checkpointName) {
   const mins = tripList.flatMap(trip => {
     const cp = trip.checkpoints.find(c => c.name === checkpointName && c.time != null);
     if (!cp) return [];
-    const d = new Date(cp.time);
-    return [d.getHours() * 60 + d.getMinutes()];
+    const parts = localCalendarParts(cp.time);
+    return [parts.hour * 60 + parts.minute];
   }).sort((a,b)=>a-b);
   return clusterScheduleMinutes(mins);
 }
@@ -1065,10 +1293,10 @@ function hasActiveTimeFilter() {
 
 function applyTimeFilters(tripList) {
   return tripList.filter(trip => {
-    const d = new Date(trip.startedAt);
-    if (timeFilters.days.size > 0 && !timeFilters.days.has(d.getDay())) return false;
+    const parts = localCalendarParts(trip.startedAt);
+    if (timeFilters.days.size > 0 && !timeFilters.days.has(parts.weekday)) return false;
     if (timeFilters.timeFrom || timeFilters.timeTo) {
-      const mins = d.getHours() * 60 + d.getMinutes();
+      const mins = parts.hour * 60 + parts.minute;
       if (timeFilters.timeFrom) {
         const [fh, fm] = timeFilters.timeFrom.split(':').map(Number);
         if (mins < fh * 60 + fm) return false;
@@ -1196,7 +1424,7 @@ function renderInsights() {
   renderFilterPanel('insights-filter-panel', 'renderInsights');
   const body = document.getElementById('insights-body');
   body.innerHTML = '';
-  const filtered = applyTimeFilters(trips);
+  const filtered = applyTimeFilters(trips.filter(t => !t.inProgress));
   const byType = {};
   filtered.forEach(t=>{ if(!byType[t.type])byType[t.type]=[]; byType[t.type].push(t); });
   if (!Object.keys(byType).length) {
@@ -1268,7 +1496,7 @@ function buildHistItem(trip, td) {
     <span class="hist-chevron">▶</span>
     <div class="hist-icon">${td.icon}</div>
     <div class="hist-meta">
-      <div class="hist-name">${td.name}${variantLabel}</div>
+      <div class="hist-name">${td.name}${variantLabel}${trip.inProgress?' · In progress':''}</div>
       <div class="hist-sub">${fmtDate(trip.startedAt)} · ${logged}/${trip.checkpoints.length} checkpoints</div>
       ${commentSnippet}
     </div>
@@ -1288,8 +1516,7 @@ function buildHistItem(trip, td) {
 
 function buildDetailContent(trip, editing) {
   const frag = document.createDocumentFragment();
-  const tripDate = new Date(trip.startedAt);
-  const dateStr = tripDate.toLocaleDateString('en-CA');
+  const dateStr = localDateString(trip.startedAt);
 
   if (!editing) {
     trip.checkpoints.forEach((cp, i) => {
@@ -1299,20 +1526,24 @@ function buildDetailContent(trip, editing) {
       const timeStr = cp.skipped ? 'skipped' : (cp.time ? fmtTime(cp.time) : '—');
       cpRow.innerHTML = `<span class="${nameClass}">${cp.name}</span><span class="hist-cp-time">${timeStr}</span>`;
       frag.appendChild(cpRow);
-      if (i < trip.checkpoints.length-1 && cp.time!=null && trip.checkpoints[i+1].time!=null && trip.checkpoints[i+1].time >= cp.time) {
+      if (i < trip.checkpoints.length-1 && cp.time!=null && trip.checkpoints[i+1].time!=null && localDateTimeValue(trip.checkpoints[i+1].time) >= localDateTimeValue(cp.time)) {
         const gap = document.createElement('div');
         gap.className = 'hist-cp-gap';
-        gap.textContent = fmtDur(trip.checkpoints[i+1].time - cp.time);
+        gap.textContent = fmtDur(localDateTimeValue(trip.checkpoints[i+1].time) - localDateTimeValue(cp.time));
         frag.appendChild(gap);
       }
     });
   } else {
+    const dateRow = document.createElement('div');
+    dateRow.className = 'hist-cp-row';
+    dateRow.innerHTML = `<span class="hist-cp-name" style="font-size:13px;font-weight:600;">Trip date</span><input class="hist-cp-input hist-date-input" id="trip-date-${trip.id}" type="date" value="${dateStr}">`;
+    frag.appendChild(dateRow);
     const hint = document.createElement('div');
     hint.style.cssText = 'font-size:12px;color:var(--text2);padding:8px 16px 4px;';
-    hint.textContent = 'Leave blank to clear a checkpoint.';
+    hint.textContent = 'Changing the trip date moves all checkpoints with it. Leave a time blank to clear that checkpoint.';
     frag.appendChild(hint);
     trip.checkpoints.forEach((cp, i) => {
-      const val = cp.time ? new Date(cp.time).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '';
+      const val = cp.time ? localTimeInputValue(cp.time) : '';
       const cpRow = document.createElement('div');
       cpRow.className = 'hist-cp-row';
       cpRow.innerHTML = `<span class="hist-cp-name" style="font-size:13px;">${cp.name}</span><input class="hist-cp-input" type="time" data-idx="${i}" value="${val}">`;
@@ -1391,34 +1622,57 @@ function cancelInlineEdit(id) {
 function saveInlineEdit(id) {
   const trip = trips.find(t=>t.id===id); if(!trip) return;
   const item = document.getElementById('hist-item-' + id); if(!item) return;
-  const inputs = item.querySelectorAll('.hist-cp-input');
-  const tripDate = new Date(trip.startedAt);
-  const dateStr = tripDate.toLocaleDateString('en-CA');
+  const timeInputs = item.querySelectorAll('.hist-cp-input[data-idx]');
+  const dateInput = item.querySelector('#trip-date-' + id);
+  const oldDateStr = localDateString(trip.startedAt);
+  const dateStr = dateInput && dateInput.value ? dateInput.value : oldDateStr;
+  const oldMidnight = localDateTimeValue(`${oldDateStr}T00:00:00.000`);
+  const newMidnight = localDateTimeValue(`${dateStr}T00:00:00.000`);
+  const dayShift = newMidnight - oldMidnight;
+  const originalTimes = trip.checkpoints.map(cp => cp.time);
+  const editedCheckpoints = trip.checkpoints.map(cp => ({ ...cp }));
   let valid = true;
-  inputs.forEach((input, i) => {
+  if (!isLocalDateTime(`${dateStr}T00:00:00.000`)) {
+    if (dateInput) dateInput.style.borderColor='#c0392b';
+    return;
+  }
+  timeInputs.forEach(input => {
+    const i = Number(input.dataset.idx);
     const val = input.value.trim();
     if (val === '') {
-      trip.checkpoints[i].time = null;
+      editedCheckpoints[i].time = null;
     } else {
-      const ts = new Date(`${dateStr}T${val}:00`).getTime();
-      if (isNaN(ts)) { valid = false; input.style.borderColor='#c0392b'; return; }
-      trip.checkpoints[i].time = ts;
+      const shiftedCheckpointDate = originalTimes[i]
+        ? localDateString(localDateTimeFromFloatingValue(localDateTimeValue(originalTimes[i]) + dayShift))
+        : dateStr;
+      const localTime = `${shiftedCheckpointDate}T${val}:00.000`;
+      if (!isLocalDateTime(localTime)) { valid = false; input.style.borderColor='#c0392b'; return; }
+      editedCheckpoints[i].time = localTime;
     }
   });
   if (!valid) return;
-  const normalizedTrip = normalizeCheckpointTimeline(trip);
-  if (normalizedTrip !== trip) {
-    trip.checkpoints = normalizedTrip.checkpoints;
-  }
+  const editedTrip = {
+    ...trip,
+    startedAt: localDateTimeFromFloatingValue(localDateTimeValue(trip.startedAt) + dayShift),
+    checkpoints: editedCheckpoints,
+  };
+  const normalizedTrip = normalizeCheckpointTimeline(editedTrip);
+  trip.startedAt = normalizedTrip.startedAt;
+  trip.checkpoints = normalizedTrip.checkpoints;
   // Save comment
   const commentEl = item.querySelector('#comment-' + id);
   if (commentEl) {
     const c = commentEl.value.trim();
     trip.comment = c || undefined;
   }
+  if (activeTrip && activeTrip.id === trip.id) {
+    activeTrip = trip;
+    persistActiveTrip();
+  }
+  trips.sort((a,b)=>localDateTimeValue(b.startedAt)-localDateTimeValue(a.startedAt));
   persist();
   editingTrips.delete(id);
-  refreshHistItem(id);
+  renderHistory();
 }
 
 function confirmDeleteInline(id) {
@@ -1432,6 +1686,14 @@ function closeModal(id) {
 
 function doDelete() {
   trips = trips.filter(t=>t.id!==deleteId);
+  if (activeTrip && activeTrip.id === deleteId) {
+    activeTrip = null;
+    selectedType = null;
+    activeCheckpointEdit = null;
+    persistActiveTrip();
+    document.getElementById('step-choose').style.display = 'block';
+    document.getElementById('step-log').style.display = 'none';
+  }
   expandedTrips.delete(deleteId);
   editingTrips.delete(deleteId);
   persist(); closeModal('modal-confirm'); renderHistory();
@@ -1441,7 +1703,7 @@ function doDelete() {
 let addModalMode = 'route'; // 'route' or 'flight'
 
 // Default departure checkpoints (substituting {AIRPORT} and {CITY} placeholders)
-const DEP_CPS_TPL = ['Left {CITY}','Called Uber','Uber/car arrived','Arrived at {AIRPORT}','Through security','At gate'];
+const DEP_CPS_TPL = ['Left {CITY}','Called Uber','Uber/car arrived','Arrived at {AIRPORT}','Through security','Boarding','Departure'];
 const ARR_CPS_TPL = ['Landed at {AIRPORT}','Deplaned','Arrived at baggage claim','Baggage claimed','Called Uber','Uber/car arrived','Arrived at {CITY}'];
 
 function applyFlightTpl(tpl, city, airport) {
@@ -1578,9 +1840,9 @@ function saveNewRoute() {
 // ── Export / Import ───────────────────────────────────────────────────────────
 function exportData() {
   if(!trips.length&&!Object.keys(customRoutes).length){showBanner('Nothing to export yet.',false);return;}
-  const blob=new Blob([JSON.stringify({version:2,exportedAt:Date.now(),trips,customRoutes},null,2)],{type:'application/json'});
+  const blob=new Blob([JSON.stringify({version:3,exportedAt:localDateTimeNow(),trips,customRoutes},null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
-  const a=document.createElement('a'); a.href=url; a.download=`commute-tracker-${new Date().toISOString().slice(0,10)}.json`;
+  const a=document.createElement('a'); a.href=url; a.download=`commute-tracker-${localDateString(localDateTimeNow())}.json`;
   a.click(); URL.revokeObjectURL(url);
   showBanner(`Exported ${trips.length} trips successfully.`,true);
 }
@@ -1616,8 +1878,9 @@ function importData(e) {
       });
       const existRouteIds=new Set(Object.keys(customRoutes));
       let newRoutes=0;
-      Object.entries(incomingRoutes).forEach(([id,r])=>{if(!existRouteIds.has(id)){customRoutes[id]=r;newRoutes++;}});
-      trips=[...trips,...newTrips].sort((a,b)=>b.startedAt-a.startedAt);
+      const normalizedIncomingRoutes=normalizeCustomFlightRoutes(incomingRoutes);
+      Object.entries(normalizedIncomingRoutes).forEach(([id,r])=>{if(!existRouteIds.has(id)){customRoutes[id]=r;newRoutes++;}});
+      trips=[...trips,...newTrips].sort((a,b)=>localDateTimeValue(b.startedAt)-localDateTimeValue(a.startedAt));
       persist(); renderHistory(); renderTripGrid();
       let msg=`Imported ${newTrips.length} trip${newTrips.length!==1?'s':''}.`;
       if(repairedTrips>0) msg+=` Repaired ${repairedTrips} existing morning trip${repairedTrips!==1?'s':''}.`;
@@ -1641,12 +1904,26 @@ function showBanner(msg,success){
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-function fmtTime(ts){return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
-function fmtDate(ts){return new Date(ts).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric',year:'numeric'});}
+function localDateString(value) {
+  const parts = localCalendarParts(value);
+  return `${parts.year}-${padDatePart(parts.month)}-${padDatePart(parts.day)}`;
+}
+function localTimeInputValue(value) {
+  const parts = localCalendarParts(value);
+  return `${padDatePart(parts.hour)}:${padDatePart(parts.minute)}`;
+}
+function fmtTime(ts){
+  if (!isLocalDateTime(ts)) return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  return new Date(localDateTimeValue(ts)).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',timeZone:'UTC'});
+}
+function fmtDate(ts){
+  if (!isLocalDateTime(ts)) return new Date(ts).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+  return new Date(localDateTimeValue(ts)).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric',year:'numeric',timeZone:'UTC'});
+}
 function fmtDur(ms){const m=Math.max(0,Math.round(ms/60000));return m<60?m+'m':Math.floor(m/60)+'h '+(m%60)+'m';}
-function getTripDur(trip){const t=trip.checkpoints.filter(c=>c.time!=null).map(c=>c.time);if(t.length<2)return null;return Math.max(...t)-Math.min(...t);}
+function getTripDur(trip){const t=trip.checkpoints.filter(c=>c.time!=null).map(c=>localDateTimeValue(c.time));if(t.length<2)return null;return Math.max(...t)-Math.min(...t);}
 function segStats(tripList,from,to){
-  const d=tripList.flatMap(tr=>{const cps=tr.checkpoints;return(cps.length>to&&cps[from]&&cps[to]&&cps[from].time&&cps[to].time&&cps[to].time>=cps[from].time)?[cps[to].time-cps[from].time]:[];}).sort((a,b)=>a-b);
+  const d=tripList.flatMap(tr=>{const cps=tr.checkpoints;if(cps.length<=to||!cps[from]||!cps[to]||!cps[from].time||!cps[to].time)return[];const fromTime=localDateTimeValue(cps[from].time);const toTime=localDateTimeValue(cps[to].time);return toTime>=fromTime?[toTime-fromTime]:[];}).sort((a,b)=>a-b);
   if(!d.length)return null;
   return{med:d[Math.floor(d.length/2)],min:d[0],max:d[d.length-1],n:d.length};
 }
