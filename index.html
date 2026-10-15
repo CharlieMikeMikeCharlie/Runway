@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Commute Tracker</title>
+<meta name="theme-color" content="#1e1e1c">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -55,7 +58,7 @@
   .trip-card-icon { font-size: 20px; margin-bottom: 6px; line-height: 1; }
   .trip-card-name { font-size: 13px; font-weight: 600; }
   .trip-card-desc { font-size: 11px; color: var(--text2); margin-top: 2px; }
-  .variant-toggle { display: flex; margin-top: 8px; gap: 4px; }
+  .variant-toggle { display: flex; flex-wrap: wrap; margin-top: 8px; gap: 4px; }
   .variant-btn { font-size: 11px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--border2); background: transparent; color: var(--text2); cursor: pointer; font-weight: 500; transition: all 0.12s; }
   .variant-btn.active { background: var(--text); color: var(--bg); border-color: var(--text); }
 
@@ -230,6 +233,7 @@
   .hist-cp-input { font-size: 13px; padding: 5px 8px; border-radius: var(--r); border: 1px solid var(--border2); background: var(--bg); color: var(--text); width: 106px; flex-shrink: 0; }
   .hist-date-input { width: 142px; }
 </style>
+<link rel="stylesheet" href="./refinements.css">
 </head>
 <body>
 <div class="container">
@@ -253,6 +257,10 @@
       <div class="route-group">
         <div class="section-label">Flights</div>
         <div id="flight-grid"></div>
+      </div>
+      <div class="route-group">
+        <div class="section-label">Toronto &amp; London ground travel</div>
+        <div class="grid-2" id="destination-flight-grid"></div>
       </div>
       <div class="route-group">
         <button class="collapsible-toggle" id="custom-flights-toggle" onclick="toggleSection('custom-flights-toggle','custom-flights-body')">
@@ -429,22 +437,54 @@ const BUILTIN = {
     },
     defaultVariant: 'transit',
   },
-  'flight-lga-dep': { name:'LGA · Departure', icon:'\u2708\uFE0F', group:'flight', dir:'dep', airport:'LGA', cps:['Left home','Called Uber','Uber/car arrived','Arrived at LGA','Through security','Boarding','Departure'], skippable:new Set([1]) },
-  'flight-jfk-dep': { name:'JFK · Departure', icon:'\u2708\uFE0F', group:'flight', dir:'dep', airport:'JFK', cps:['Left home','Called Uber','Uber/car arrived','Arrived at JFK','Through security','Boarding','Departure'], skippable:new Set([1]) },
-  'flight-hpn-dep': { name:'HPN · Departure', icon:'\u2708\uFE0F', group:'flight', dir:'dep', airport:'HPN', cps:['Left home','Called Uber','Uber/car arrived','Arrived at HPN','Through security','Boarding','Departure'], skippable:new Set([1]) },
+  'flight-lga-dep': { name:'LGA · Departure', icon:'\u2708\uFE0F', group:'flight', dir:'dep', airport:'LGA', cps:['Left home','Called Uber','Uber/car arrived','Arrived at LGA','Through security','Boarding','Actual flight departure'], skippable:new Set([1]) },
+  'flight-jfk-dep': { name:'JFK · Departure', icon:'\u2708\uFE0F', group:'flight', dir:'dep', airport:'JFK', cps:['Left home','Called Uber','Uber/car arrived','Arrived at JFK','Through security','Boarding','Actual flight departure'], skippable:new Set([1]) },
+  'flight-hpn-dep': { name:'HPN · Departure', icon:'\u2708\uFE0F', group:'flight', dir:'dep', airport:'HPN', cps:['Left home','Called Uber','Uber/car arrived','Arrived at HPN','Through security','Boarding','Actual flight departure'], skippable:new Set([1]) },
   'flight-lga-arr': { name:'LGA · Arrival', icon:'\u{1F6EC}', group:'flight', dir:'arr', airport:'LGA', cps:['Landed at LGA','Deplaned','Arrived at baggage claim','Baggage claimed','Called Uber','Uber/car arrived','Arrived home'], skippable:new Set([2,3,4]) },
   'flight-jfk-arr': { name:'JFK · Arrival', icon:'\u{1F6EC}', group:'flight', dir:'arr', airport:'JFK', cps:['Landed at JFK','Deplaned','Arrived at baggage claim','Baggage claimed','Called Uber','Uber/car arrived','Arrived home'], skippable:new Set([2,3,4]) },
   'flight-hpn-arr': { name:'HPN · Arrival', icon:'\u{1F6EC}', group:'flight', dir:'arr', airport:'HPN', cps:['Landed at HPN','Deplaned','Arrived at baggage claim','Baggage claimed','Called Uber','Uber/car arrived','Arrived home'], skippable:new Set([2,3,4]) },
+  'flight-yyz-dep': {
+    name:'Toronto → YYZ', icon:'\u2708\uFE0F', group:'destination-flight', dir:'dep', airport:'YYZ', city:'Toronto',
+    variants: {
+      train: { label:'UP Express', cps:['Left Toronto','Arrived at Union Station','Boarded UP Express','UP Express departure','Arrived at YYZ','Through security','Boarding','Actual flight departure'] },
+      car: { label:'Car', cps:['Left Toronto','Car arrived','Arrived at YYZ','Through security','Boarding','Actual flight departure'] },
+    }, defaultVariant:'train',
+  },
+  'flight-yyz-arr': {
+    name:'YYZ → Toronto', icon:'\u{1F6EC}', group:'destination-flight', dir:'arr', airport:'YYZ', city:'Toronto',
+    variants: {
+      train: { label:'UP Express', cps:['Landed at YYZ','Deplaned','Arrived at baggage claim','Baggage claimed','Arrived at UP Express','Boarded UP Express','UP Express departure','Arrived at Union Station','Arrived in Toronto'] },
+      car: { label:'Car', cps:['Landed at YYZ','Deplaned','Arrived at baggage claim','Baggage claimed','Called car','Car arrived','Arrived in Toronto'] },
+    }, defaultVariant:'train',
+  },
+  'flight-lhr-dep': {
+    name:'London → LHR', icon:'\u2708\uFE0F', group:'destination-flight', dir:'dep', airport:'LHR', city:'London',
+    variants: {
+      train: { label:'Heathrow Express', cps:['Left London','Arrived at Paddington','Boarded Heathrow Express','Heathrow Express departure','Arrived at LHR','Through security','Boarding','Actual flight departure'] },
+      car: { label:'Car', cps:['Left London','Car arrived','Arrived at LHR','Through security','Boarding','Actual flight departure'] },
+    }, defaultVariant:'train',
+  },
+  'flight-lhr-arr': {
+    name:'LHR → London', icon:'\u{1F6EC}', group:'destination-flight', dir:'arr', airport:'LHR', city:'London',
+    variants: {
+      train: { label:'Heathrow Express', cps:['Landed at LHR','Deplaned','Arrived at baggage claim','Baggage claimed','Arrived at Heathrow Express','Boarded Heathrow Express','Heathrow Express departure','Arrived at Paddington','Arrived in London'] },
+      car: { label:'Car', cps:['Landed at LHR','Deplaned','Arrived at baggage claim','Baggage claimed','Called car','Car arrived','Arrived in London'] },
+    }, defaultVariant:'train',
+  },
 };
 
-// Active variant selection per commute type (session only)
-const commuteVariants = { 'commute-am': 'transit', 'commute-pm': 'transit' };
+// Active variant selection per route type (session only)
+const routeVariants = {
+  'commute-am': 'transit', 'commute-pm': 'transit',
+  'flight-yyz-dep': 'train', 'flight-yyz-arr': 'train',
+  'flight-lhr-dep': 'train', 'flight-lhr-arr': 'train',
+};
 
 // Helper: get effective checkpoints for a type (resolves variants)
 function getCps(typeId) {
   const td = getType(typeId);
   if (!td) return [];
-  if (td.variants) return td.variants[commuteVariants[typeId] || td.defaultVariant].cps;
+  if (td.variants) return td.variants[routeVariants[typeId] || td.defaultVariant].cps;
   return td.cps;
 }
 
@@ -549,9 +589,10 @@ function normalizeCustomFlightRoutes(routes) {
   let changed = false;
   const normalized = {};
   Object.entries(routes || {}).forEach(([id, route]) => {
-    if (route && route.group === 'custom-flight' && route.dir === 'dep' && Array.isArray(route.cps) && route.cps.includes('At gate')) {
-      normalized[id] = { ...route, cps: route.cps.flatMap(cp => cp === 'At gate' ? ['Boarding','Departure'] : [cp]) };
-      changed = true;
+    if (route && route.group === 'custom-flight' && route.dir === 'dep' && Array.isArray(route.cps)) {
+      const cps = route.cps.flatMap(cp => cp === 'At gate' ? ['Boarding','Actual flight departure'] : [cp === 'Departure' ? 'Actual flight departure' : cp]);
+      normalized[id] = { ...route, cps };
+      if (JSON.stringify(cps) !== JSON.stringify(route.cps)) changed = true;
     } else {
       normalized[id] = route;
     }
@@ -594,10 +635,20 @@ function normalizeLegacyTrip(trip) {
   const gateIdx = normalized.checkpoints.findIndex(c => c.name === 'At gate');
   if (gateIdx !== -1) {
     normalized.checkpoints[gateIdx].name = 'Boarding';
-    if (!hasCheckpointName(normalized, 'Departure')) {
-      normalized.checkpoints.splice(gateIdx + 1, 0, { name:'Departure', time:null, skipped:false });
+    if (!hasCheckpointName(normalized, 'Departure') && !hasCheckpointName(normalized, 'Actual flight departure')) {
+      normalized.checkpoints.splice(gateIdx + 1, 0, { name:'Actual flight departure', time:null, skipped:false });
     }
     changed = true;
+  }
+  const td = getType(normalized.type);
+  const isFlightDeparture = (td && (td.group === 'flight' || td.group === 'destination-flight' || td.group === 'custom-flight') && td.dir === 'dep')
+    || (typeof normalized.type === 'string' && normalized.type.startsWith('custom-flight-') && normalized.type.endsWith('-dep'));
+  if (isFlightDeparture) {
+    const departure = normalized.checkpoints.find(c => c.name === 'Departure');
+    if (departure) {
+      departure.name = 'Actual flight departure';
+      changed = true;
+    }
   }
   const timelineNormalized = normalizeCheckpointTimeline(normalized);
   if (timelineNormalized !== normalized) return timelineNormalized;
@@ -685,6 +736,7 @@ function switchTab(name) {
 function renderTripGrid() {
   fillGrid('commute-grid', Object.entries(BUILTIN).filter(([,v])=>v.group==='commute'));
   renderAirportGrid();
+  fillGrid('destination-flight-grid', Object.entries(BUILTIN).filter(([,v])=>v.group==='destination-flight'));
   renderCustomFlightGrid();
   fillGrid('custom-grid', Object.entries(customRoutes).filter(([,v])=>v.group==='custom'));
 }
@@ -746,9 +798,9 @@ function fillGrid(containerId, entries) {
       toggleRow.onclick = e => e.stopPropagation();
       Object.entries(td.variants).forEach(([vKey, vData]) => {
         const btn = document.createElement('button');
-        btn.className = 'variant-btn' + ((commuteVariants[id]||td.defaultVariant)===vKey?' active':'');
+        btn.className = 'variant-btn' + ((routeVariants[id]||td.defaultVariant)===vKey?' active':'');
         btn.textContent = vData.label;
-        btn.onclick = (e) => { e.stopPropagation(); commuteVariants[id]=vKey; renderTripGrid(); };
+        btn.onclick = (e) => { e.stopPropagation(); routeVariants[id]=vKey; renderTripGrid(); };
         toggleRow.appendChild(btn);
       });
       div.appendChild(toggleRow);
@@ -819,7 +871,7 @@ function startTrip() {
   const td = getType(selectedType);
   const cps = getCps(selectedType);
   // store which variant was used so history can display it correctly
-  const variantKey = td.variants ? (commuteVariants[selectedType] || td.defaultVariant) : null;
+  const variantKey = td.variants ? (routeVariants[selectedType] || td.defaultVariant) : null;
   activeTrip = { id: Date.now(), type: selectedType, variantKey, startedAt: localDateTimeNow(), inProgress:true, checkpoints: cps.map(n=>({name:n,time:null,skipped:false})) };
   activeCheckpointEdit = null;
   activeTripRecovered = false;
@@ -896,7 +948,7 @@ function renderActiveCPs() {
     const timeButton = `<button class="cp-time-edit${logged?'':' empty'}" onclick="openActiveTimeEditor(${i})">${logged?fmtTime(cp.time):'Set time'}</button>`;
     row.innerHTML = `
       <div class="cp-dot ${dotClass}"></div>
-      <div class="cp-label" style="${skipped?'color:var(--text3);text-decoration:line-through;':''}">${cp.name}</div>
+      <div class="cp-label" style="${skipped?'color:var(--text3);text-decoration:line-through;':''}">${escHtml(cp.name)}</div>
       <div class="cp-time">${timeButton}</div>
       ${leftBtn}${rightBtn}
     `;
@@ -915,7 +967,7 @@ function renderActiveCPs() {
     }
   });
   document.getElementById('log-started').textContent = 'Started ' + fmtTime(activeTrip.startedAt);
-  document.getElementById('save-btn').disabled = !cps.some(c=>c.time!=null||c.skipped);
+  document.getElementById('save-btn').disabled = !cps[0].time || !cps[cps.length-1].time;
   renderActiveAction();
 }
 
@@ -1013,7 +1065,10 @@ function undoCP(i) {
   renderActiveCPs();
 }
 
-function saveTrip() {
+function saveTrip(endedEarly = false) {
+  if (!activeTrip) return;
+  if (!endedEarly && (!activeTrip.checkpoints[0].time || !activeTrip.checkpoints.at(-1).time)) return;
+  activeTrip.incomplete = endedEarly;
   const completed = { ...activeTrip, inProgress:false, checkpoints: activeTrip.checkpoints.map(c=>({...c})) };
   const existingIdx = trips.findIndex(t => t.id === completed.id);
   if (existingIdx === -1) trips.unshift(completed);
@@ -1030,6 +1085,7 @@ function saveTrip() {
 }
 
 function discardTrip() {
+  if (!confirm('Discard this trip and its recorded checkpoints?')) return;
   if (activeTrip) trips = trips.filter(t => t.id !== activeTrip.id);
   activeTrip = null; selectedType = null;
   activeCheckpointEdit = null;
@@ -1052,6 +1108,7 @@ function renderPlanTab() {
   const groups = [
     ['Commutes', Object.entries(BUILTIN).filter(([,v])=>v.group==='commute')],
     ['Flights',  Object.entries(BUILTIN).filter(([,v])=>v.group==='flight')],
+    ['Toronto & London', Object.entries(BUILTIN).filter(([,v])=>v.group==='destination-flight')],
     ['Other routes', Object.entries(customRoutes)],
   ];
   groups.forEach(([label, entries]) => {
@@ -1103,7 +1160,8 @@ function renderPlan() {
   const segsEl = document.getElementById('plan-segments');
   if (!typeId || !arriveStr) { resultEl.innerHTML=''; segsEl.innerHTML=''; return; }
   const td = getType(typeId); if (!td) return;
-  const tripsOf = trips.filter(t=>!t.inProgress && t.type===typeId);
+  const selectedVariant = td.variants ? (routeVariants[typeId] || td.defaultVariant) : null;
+  const tripsOf = trips.filter(t=>!t.inProgress && t.type===typeId && (!selectedVariant || t.variantKey===selectedVariant));
   const planCps = getCps(typeId);
   const [h,m] = arriveStr.split(':').map(Number);
   const arriveTs = new Date(); arriveTs.setHours(h,m,0,0);
@@ -1240,7 +1298,8 @@ function namedSegStats(tripList, fromNameOrFn, toNameOrFn) {
 function durationStats(durations) {
   const d = durations.filter(ms => ms >= 0).sort((a,b)=>a-b);
   if (!d.length) return null;
-  return{med:d[Math.floor(d.length/2)],min:d[0],max:d[d.length-1],n:d.length};
+  const mid = Math.floor(d.length / 2);
+  return{med:d.length%2?d[mid]:(d[mid-1]+d[mid])/2,p90:d[Math.ceil(d.length*.9)-1],min:d[0],max:d[d.length-1],n:d.length};
 }
 
 function getObservedTrainSchedule(tripList) {
@@ -1426,17 +1485,22 @@ function renderInsights() {
   body.innerHTML = '';
   const filtered = applyTimeFilters(trips.filter(t => !t.inProgress));
   const byType = {};
-  filtered.forEach(t=>{ if(!byType[t.type])byType[t.type]=[]; byType[t.type].push(t); });
+  filtered.forEach(t=>{
+    const key = t.variantKey ? `${t.type}::${t.variantKey}` : t.type;
+    if(!byType[key]) byType[key]=[];
+    byType[key].push(t);
+  });
   if (!Object.keys(byType).length) {
     body.innerHTML = hasActiveTimeFilter()
       ? '<div class="empty">No trips match these filters.</div>'
       : '<div class="empty">No trips yet.</div>';
     return;
   }
-  const order=['commute','flight','custom'];
+  const order=['commute','flight','destination-flight','custom-flight','custom'];
   Object.entries(byType)
-    .sort(([a],[b])=>order.indexOf((getType(a)||{group:'custom'}).group)-order.indexOf((getType(b)||{group:'custom'}).group))
-    .forEach(([type,ts])=>{
+    .sort(([a],[b])=>order.indexOf((getType(a.split('::')[0])||{group:'custom'}).group)-order.indexOf((getType(b.split('::')[0])||{group:'custom'}).group))
+    .forEach(([typeKey,ts])=>{
+      const [type, variantKey] = typeKey.split('::');
       const td=getType(type); if(!td) return;
       const repTrip = ts[0];
       const icps = repTrip && repTrip.checkpoints ? repTrip.checkpoints.map(c=>c.name) : getCps(type);
@@ -1444,7 +1508,8 @@ function renderInsights() {
       for(let i=0;i<icps.length-1;i++){const s=segStats(ts,i,i+1);if(s){maxMed=Math.max(maxMed,s.med);segs.push({label:`${icps[i]} → ${icps[i+1]}`,s});}}
       const total=segStats(ts,0,icps.length-1);
       const card=document.createElement('div'); card.className='insight-card';
-      let html=`<div class="insight-header"><div class="insight-title">${td.icon} ${td.name}</div><div class="insight-meta">${ts.length} trip${ts.length>1?'s':''}</div></div>`;
+      const variantLabel = variantKey && td.variants && td.variants[variantKey] ? ` · ${td.variants[variantKey].label}` : '';
+      let html=`<div class="insight-header"><div class="insight-title">${td.icon} ${td.name}${variantLabel}</div><div class="insight-meta">${ts.length} trip${ts.length>1?'s':''}</div></div>`;
       if(total) html+=`<div class="insight-total">Total median: <strong>${fmtDur(total.med)}</strong></div>`;
       segs.forEach(({label,s})=>{const pct=maxMed>0?Math.round(s.med/maxMed*100):0;html+=`<div class="seg-row"><div class="seg-label">${label}</div><div class="seg-bar-bg"><div class="seg-bar" style="width:${pct}%"></div></div><div class="seg-med">${fmtDur(s.med)}</div>${s.n>1?`<div class="seg-range">${fmtDur(s.min)}–${fmtDur(s.max)}</div>`:'<div class="seg-range">1 sample</div>'}</div>`;});
       card.innerHTML=html; body.appendChild(card);
@@ -1480,7 +1545,7 @@ function renderHistory() {
 function buildHistItem(trip, td) {
   const dur = getTripDur(trip);
   const logged = trip.checkpoints.filter(c=>c.time!=null).length;
-  const variantLabel = trip.variantKey && td.variants ? ' · ' + td.variants[trip.variantKey].label : '';
+  const variantLabel = trip.variantKey && td.variants?.[trip.variantKey] ? ' · ' + td.variants[trip.variantKey].label : '';
   const isExpanded = expandedTrips.has(trip.id);
   const isEditing = editingTrips.has(trip.id);
 
@@ -1496,7 +1561,7 @@ function buildHistItem(trip, td) {
     <span class="hist-chevron">▶</span>
     <div class="hist-icon">${td.icon}</div>
     <div class="hist-meta">
-      <div class="hist-name">${td.name}${variantLabel}${trip.inProgress?' · In progress':''}</div>
+      <div class="hist-name">${escHtml(td.name)}${escHtml(variantLabel)}${trip.inProgress?' · In progress':''}</div>
       <div class="hist-sub">${fmtDate(trip.startedAt)} · ${logged}/${trip.checkpoints.length} checkpoints</div>
       ${commentSnippet}
     </div>
@@ -1524,7 +1589,7 @@ function buildDetailContent(trip, editing) {
       cpRow.className = 'hist-cp-row';
       const nameClass = cp.skipped ? 'hist-cp-name skipped' : 'hist-cp-name';
       const timeStr = cp.skipped ? 'skipped' : (cp.time ? fmtTime(cp.time) : '—');
-      cpRow.innerHTML = `<span class="${nameClass}">${cp.name}</span><span class="hist-cp-time">${timeStr}</span>`;
+      cpRow.innerHTML = `<span class="${nameClass}">${escHtml(cp.name)}</span><span class="hist-cp-time">${timeStr}</span>`;
       frag.appendChild(cpRow);
       if (i < trip.checkpoints.length-1 && cp.time!=null && trip.checkpoints[i+1].time!=null && localDateTimeValue(trip.checkpoints[i+1].time) >= localDateTimeValue(cp.time)) {
         const gap = document.createElement('div');
@@ -1546,7 +1611,7 @@ function buildDetailContent(trip, editing) {
       const val = cp.time ? localTimeInputValue(cp.time) : '';
       const cpRow = document.createElement('div');
       cpRow.className = 'hist-cp-row';
-      cpRow.innerHTML = `<span class="hist-cp-name" style="font-size:13px;">${cp.name}</span><input class="hist-cp-input" type="time" data-idx="${i}" value="${val}">`;
+      cpRow.innerHTML = `<span class="hist-cp-name" style="font-size:13px;">${escHtml(cp.name)}</span><input class="hist-cp-input" type="time" data-idx="${i}" value="${val}">`;
       frag.appendChild(cpRow);
     });
   }
@@ -1703,7 +1768,7 @@ function doDelete() {
 let addModalMode = 'route'; // 'route' or 'flight'
 
 // Default departure checkpoints (substituting {AIRPORT} and {CITY} placeholders)
-const DEP_CPS_TPL = ['Left {CITY}','Called Uber','Uber/car arrived','Arrived at {AIRPORT}','Through security','Boarding','Departure'];
+const DEP_CPS_TPL = ['Left {CITY}','Called Uber','Uber/car arrived','Arrived at {AIRPORT}','Through security','Boarding','Actual flight departure'];
 const ARR_CPS_TPL = ['Landed at {AIRPORT}','Deplaned','Arrived at baggage claim','Baggage claimed','Called Uber','Uber/car arrived','Arrived at {CITY}'];
 
 function applyFlightTpl(tpl, city, airport) {
@@ -1928,9 +1993,7 @@ function segStats(tripList,from,to){
   return{med:d[Math.floor(d.length/2)],min:d[0],max:d[d.length-1],n:d.length};
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
-renderTripGrid();
-showActiveTrip();
 </script>
+<script src="./refinements.js"></script>
 </body>
 </html>

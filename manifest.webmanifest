@@ -1,0 +1,11 @@
+{
+  "name": "Commute Tracker",
+  "short_name": "Commute",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1e1e1c",
+  "theme_color": "#1e1e1c",
+  "icons": [{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]
+}
